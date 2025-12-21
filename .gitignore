@@ -6,6 +6,23 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+# Compiler files
+cache/
+out/
+/lib
+broadcast/
+
+# Ignores development broadcast logs
+!/broadcast
+/broadcast/*/31337/
+/broadcast/**/dry-run/
+
+# Docs
+docs/
+
+# Dotenv file
+.env
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
