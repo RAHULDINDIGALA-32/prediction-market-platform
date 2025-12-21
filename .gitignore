@@ -9,7 +9,7 @@ lerna-debug.log*
 # Compiler files
 cache/
 out/
-/lib
+lib/
 broadcast/
 
 # Ignores development broadcast logs
