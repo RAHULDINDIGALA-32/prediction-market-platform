@@ -62,8 +62,8 @@ contract QuoteVerifier is EIP712, Ownable2Step {
         if (block.timestamp > quote.deadline) {
             revert QuoteVerifier__QuoteExpired();
         }
-        if(quote.amount == 0) {
-            revert QuoteVerifier__InvalidAmount()
+        if (quote.amount == 0) {
+            revert QuoteVerifier__InvalidAmount();
         }
 
         // Prevent cross-market replay

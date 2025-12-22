@@ -16,13 +16,12 @@ contract MarketFactory {
     QuoteVerifier public immutable i_quoteVerifier;
     SettlementEngine public immutable i_settlementEngine;
 
-
     mapping(address market => bytes32 mateHash) public marketToMetadataHash;
-    
+
     /// metadata hash → market (prevent duplicates)
     mapping(bytes32 metaHash => address market) public metadataHashToMarket;
 
-    address [] public markets;
+    address[] public markets;
 
     //////////////////////////
     /// EVENTS ///
@@ -37,12 +36,7 @@ contract MarketFactory {
     //////////////////////////
     /// FUNCTIONS ///
     //////////////////////////
-    constructor(
-        address _vault,
-        address _oracle,
-        address _quoteVerifier,
-        address _settlementEngine
-    ) {
+    constructor(address _vault, address _oracle, address _quoteVerifier, address _settlementEngine) {
         i_vault = Vault(_vault);
         i_oracle = OracleAdapter(_oracle);
         i_quoteVerifier = QuoteVerifier(_quoteVerifier);
@@ -52,22 +46,16 @@ contract MarketFactory {
     //////////////////////////
     /// External Functions ///
     //////////////////////////
-    function createMarket(bytes32 metadataHash, uitn256 endTime) external returns (address market) {
-        if(metadataHashToMarket[metadataHash] != address(0)) {
+    function createMarket(bytes32 metadataHash, uint256 endTime) external returns (address market) {
+        if (metadataHashToMarket[metadataHash] != address(0)) {
             revert MarketFactory__DuplicateMarket();
         }
-        if(endTime <= block.timestamp) {
+        if (endTime <= block.timestamp) {
             revert MarketFactory__InvalidEndTime();
         }
-        
+
         market = address(
-            new Market(
-                address(this),
-                address(i_vault),
-                address(i_quoteVerifier),
-                address(i_settlementEngine),
-                endTime
-            )
+            new Market(address(this), address(i_vault), address(i_quoteVerifier), address(i_settlementEngine), endTime)
         );
 
         marketToMetadataHash[market] = metadataHash;
@@ -87,4 +75,4 @@ contract MarketFactory {
     function getMarketMetadataHash(address market) external view returns (bytes32) {
         return marketToMetadataHash[market];
     }
-}    
+}

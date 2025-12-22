@@ -14,7 +14,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
         Outcome proposedOutcome;
         address proposer;
         uint256 proposedAt;
-        address disputer
+        address disputer;
         bool disputed;
         bool finalized;
     }
@@ -35,7 +35,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
     event OutcomeProposed(address indexed market, Outcome outcome, address proposer, uint256 timestamp);
     event OutcomeDisputed(address indexed market, address indexed disputer, uint256 timestamp);
     event OutcomeFinalized(address indexed market, Outcome finalOutcome);
-    event BondRedistributed(address indexed market, address winner, uint256 amount)
+    event BondRedistributed(address indexed market, address winner, uint256 amount);
 
     //////////////////////////
     /// ERRORS //////
@@ -97,7 +97,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
             revert OracleAdapter__OutcomeAlreadyProposed();
         }
 
-        if(msg.value != proposerBond) {
+        if (msg.value != i_proposerBond) {
             revert OracleAdapter__InvalidETHAmount();
         }
 
@@ -139,9 +139,14 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
      * @notice Finalize outcome after dispute window
      * @dev Callable by SettlementEngine only
      * @param market The market outcome to resolve
-     * @param outcome The final resolved outcome
+     * @param finalOutcome The final resolved outcome
+     * @param isProposerCorrect whether proposer proposed outcome is correct or not
      */
-    function resolveOutcome(address market, Outcome finalOutcome, bool isProposerCorrect) external nonReentrant onlyResolvers {
+    function resolveOutcome(address market, Outcome finalOutcome, bool isProposerCorrect)
+        external
+        nonReentrant
+        onlyResolvers
+    {
         OracleRequest storage request = requests[market];
         if (!request.disputed) {
             revert OracleAdapter__NotDisputed();
@@ -154,15 +159,15 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
         request.finalized = true;
 
         address winner = isProposerCorrect ? request.proposer : request.disputer;
-        uint256 reward = proposerBond + disputerBond;
+        uint256 reward = i_proposerBond + i_disputerBond;
 
-        (bool success, ) = winner.call{value: reward}("");
-        if(!success) {
+        (bool success,) = winner.call{value: reward}("");
+        if (!success) {
             revert OracleAdapter__ETHTransferFailed();
         }
 
         emit BondRedistributed(market, winner, reward);
-        emit OutcomeFinalized(market, outcome);
+        emit OutcomeFinalized(market, finalOutcome);
     }
 
     function finalize(address market) external nonReentrant {
@@ -176,14 +181,14 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
         if (request.disputed) {
             revert OracleAdapter__Disputed();
         }
-        if(block.timestamp < request.proposedAt + i_disputeWindow) {
+        if (block.timestamp < request.proposedAt + i_disputeWindow) {
             revert OracleAdapter__DisputeWindowNotClosed();
         }
 
         request.finalized = true;
 
-        (bool success, ) = (request.proposer).call{value: proposerBond}("");
-        if(!success) {
+        (bool success,) = (request.proposer).call{value: i_proposerBond}("");
+        if (!success) {
             revert OracleAdapter__ETHTransferFailed();
         }
 

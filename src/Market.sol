@@ -95,7 +95,7 @@ contract Market is ReentrancyGuard, Pausable {
     //////////////////////////
     /// External Functions ///
     //////////////////////////
-    function executeTrade(TradeQuote quote, bytes calldata signature)
+    function executeTrade(TradeQuote calldata quote, bytes calldata signature)
         external
         payable
         nonReentrant
