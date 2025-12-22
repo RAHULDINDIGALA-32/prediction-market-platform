@@ -8,8 +8,10 @@ contract Vault is ReentrancyGuard {
     /// STATE VARIABLES //////
     //////////////////////////
     address public immutable i_settlementEngine;
+    address public immutable i_marketFactory;
 
     mapping(address market => uint256 balance) private marketBalances;
+    mapping(address market => bool isValid) private validMarkets;
 
     //////////////////////////
     /// EVENTS //////
@@ -25,6 +27,8 @@ contract Vault is ReentrancyGuard {
     error Vault_InsufficientBalance();
     error Vault__ZeroETHAmount();
     error Vault__ETHTransferFailed();
+    error Vault__OnlyFactory();
+    error Vault__InvalidAddress();
 
     //////////////////////////
     /// MODIFIERS //////
@@ -32,6 +36,13 @@ contract Vault is ReentrancyGuard {
     modifier onlySettlementEngine() {
         if (msg.sender != i_settlementEngine) {
             revert Vault__NotAuthorized();
+        }
+        _;
+    }
+
+    modifier onlyFactory() {
+        if (msg.sender != i_marketFactory) {
+            revert Vault__OnlyFactory();
         }
         _;
     }
@@ -46,8 +57,24 @@ contract Vault is ReentrancyGuard {
     //////////////////////////
     /// FUNCTIONS //////
     //////////////////////////
-    constructor(address _settlementEngine) {
+    constructor(address _settlementEngine, address _marketFactory) {
+        if (_settlementEngine == address(0) || _marketFactory == address(0)) {
+            revert Vault__InvalidAddress();
+        }
         i_settlementEngine = _settlementEngine;
+        i_marketFactory = _marketFactory;
+    }
+
+    /**
+     * @notice Register a market as valid
+     * @dev Only callable by MarketFactory
+     * @param market The market address to register
+     */
+    function registerMarket(address market) external onlyFactory {
+        if (market == address(0)) {
+            revert Vault__InvalidMarket();
+        }
+        validMarkets[market] = true;
     }
 
     //////////////////////////
@@ -55,6 +82,9 @@ contract Vault is ReentrancyGuard {
     //////////////////////////
     function deposit(address market) external payable nonZeroETHAmount(msg.value) {
         if (market == address(0)) {
+            revert Vault__InvalidMarket();
+        }
+        if (!validMarkets[market]) {
             revert Vault__InvalidMarket();
         }
         marketBalances[market] += msg.value;

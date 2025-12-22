@@ -18,6 +18,7 @@ contract QuoteVerifier is EIP712, Ownable2Step {
     );
 
     mapping(address signer => bool allowed) allowedSigners;
+    mapping(address trader => mapping(address market => uint256 lastNonce)) public traderNonces;
 
     //////////////////////////
     /// EVENTS //////
@@ -32,12 +33,17 @@ contract QuoteVerifier is EIP712, Ownable2Step {
     error QuoteVerifier__QuoteExpired();
     error QuoteVerifier__InvalidAmount();
     error QuoteVerifier__InvalidMarket();
+    error QuoteVerifier__InvalidAddress();
+    error QuoteVerifier__InvalidNonce();
 
     //////////////////////////
     /// FUNCTIONS //////
     //////////////////////////
 
     constructor(address initialOwner) EIP712("PredictionMarket-QuoteVerifier", "1") {
+        if (initialOwner == address(0)) {
+            revert QuoteVerifier__InvalidAddress();
+        }
         _transferOwnership(initialOwner);
     }
 
@@ -71,6 +77,11 @@ contract QuoteVerifier is EIP712, Ownable2Step {
             revert QuoteVerifier__InvalidMarket();
         }
 
+        // Validate nonce is greater than last used nonce
+        if (quote.nonce <= traderNonces[quote.trader][quote.market]) {
+            revert QuoteVerifier__InvalidNonce();
+        }
+
         quoteHash = _hashTypedDataV4(
             keccak256(
                 abi.encode(
@@ -86,11 +97,29 @@ contract QuoteVerifier is EIP712, Ownable2Step {
             )
         );
 
-        address recoverredSigner = ECDSA.recover(quoteHash, signature);
+        address recoveredSigner = ECDSA.recover(quoteHash, signature);
 
-        if (!allowedSigners[recoverredSigner]) {
+        if (!allowedSigners[recoveredSigner]) {
             revert QuoteVerifier__UnauthorizedSigner();
         }
+    }
+
+    /**
+     * @notice Update nonce after successful trade execution
+     * @dev Only callable by Market contract
+     * @param trader The trader whose nonce to update
+     * @param market The market address
+     * @param nonce The nonce that was used
+     */
+    function updateNonce(address trader, address market, uint256 nonce) external {
+        // Only the market contract can update nonces
+        if (msg.sender != market) {
+            revert QuoteVerifier__InvalidMarket();
+        }
+        if (nonce <= traderNonces[trader][market]) {
+            revert QuoteVerifier__InvalidNonce();
+        }
+        traderNonces[trader][market] = nonce;
     }
 
     //////////////////////////

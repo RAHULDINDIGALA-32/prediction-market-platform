@@ -11,6 +11,8 @@ contract MarketFactory {
     //////////////////////////
     /// STATE VARIABLES ///
     //////////////////////////
+    uint256 public constant MAX_MARKET_DURATION = 365 days;
+
     Vault public immutable i_vault;
     OracleAdapter public immutable i_oracle;
     QuoteVerifier public immutable i_quoteVerifier;
@@ -32,11 +34,16 @@ contract MarketFactory {
     //////////////////////////
     error MarketFactory__DuplicateMarket();
     error MarketFactory__InvalidEndTime();
+    error MarketFactory__InvalidAddress();
+    error MarketFactory__DurationTooLong();
 
     //////////////////////////
     /// FUNCTIONS ///
     //////////////////////////
     constructor(address _vault, address _oracle, address _quoteVerifier, address _settlementEngine) {
+        if (_vault == address(0) || _oracle == address(0) || _quoteVerifier == address(0) || _settlementEngine == address(0)) {
+            revert MarketFactory__InvalidAddress();
+        }
         i_vault = Vault(_vault);
         i_oracle = OracleAdapter(_oracle);
         i_quoteVerifier = QuoteVerifier(_quoteVerifier);
@@ -53,6 +60,9 @@ contract MarketFactory {
         if (endTime <= block.timestamp) {
             revert MarketFactory__InvalidEndTime();
         }
+        if (endTime > block.timestamp + MAX_MARKET_DURATION) {
+            revert MarketFactory__DurationTooLong();
+        }
 
         market = address(
             new Market(address(this), address(i_vault), address(i_quoteVerifier), address(i_settlementEngine), endTime)
@@ -61,6 +71,9 @@ contract MarketFactory {
         marketToMetadataHash[market] = metadataHash;
         metadataHashToMarket[metadataHash] = market;
         markets.push(market);
+
+        // Register market with Vault
+        i_vault.registerMarket(market);
 
         emit MarketCreated(market, metadataHash, endTime);
     }
@@ -74,5 +87,9 @@ contract MarketFactory {
 
     function getMarketMetadataHash(address market) external view returns (bytes32) {
         return marketToMetadataHash[market];
+    }
+
+    function isValidMarket(address market) external view returns (bool) {
+        return marketToMetadataHash[market] != bytes32(0);
     }
 }

@@ -15,6 +15,7 @@ contract OutcomeToken is ERC20 {
     //////////////////////////
     error OutcomeToken__OnlyMarket();
     error OutcomeToken__OnlySettlementEngine();
+    error OutcomeToken__InvalidAddress();
 
     //////////////////////////
     /// Modifiers //////
@@ -39,6 +40,9 @@ contract OutcomeToken is ERC20 {
     constructor(string memory _name, string memory _symbol, address _market, address _settlementEngine)
         ERC20(_name, _symbol)
     {
+        if (_market == address(0) || _settlementEngine == address(0)) {
+            revert OutcomeToken__InvalidAddress();
+        }
         i_market = _market;
         i_settlementEngine = _settlementEngine;
     }

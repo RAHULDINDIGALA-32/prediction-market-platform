@@ -3,10 +3,12 @@ pragma solidity ^0.8.27;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
-import {Outcome} from "./MarketTypes.sol";
+import {Outcome, MarketState} from "./MarketTypes.sol";
+import {Market} from "./Market.sol";
 
-contract OracleAdapter is ReentrancyGuard, Ownable2Step {
+contract OracleAdapter is ReentrancyGuard, Ownable2Step, Pausable {
     //////////////////////////
     /// TYPE DECLARATIONS //////
     //////////////////////////
@@ -25,6 +27,8 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
     uint256 public immutable i_disputeWindow;
     uint256 public immutable i_disputerBond;
     uint256 public immutable i_proposerBond;
+    uint256 public immutable i_resolutionDeadline;
+    address public immutable i_settlementEngine;
 
     mapping(address market => OracleRequest proposalRequest) public requests;
     mapping(address user => bool isResolver) public resolvers;
@@ -53,6 +57,10 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
     error OracleAdapter__OutcomeNotFinalized();
     error OracleAdapter__InvalidETHAmount();
     error OracleAdapter__ETHTransferFailed();
+    error OracleAdapter__MarketNotClosed();
+    error OracleAdapter__ResolutionDeadlinePassed();
+    error OracleAdapter__InvalidAddress();
+    error OracleAdapter__InvalidOutcome();
 
     //////////////////////////
     /// MODIFIERS //////
@@ -64,14 +72,33 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
         _;
     }
 
+    modifier onlySettlementEngine() {
+        if (msg.sender != i_settlementEngine) {
+            revert OracleAdapter__NotAuthorized();
+        }
+        _;
+    }
+
     //////////////////////////
     /// FUNCTIONS //////
     //////////////////////////
 
-    constructor(uint256 _proposerBond, uint256 _disputeWindow, uint256 _disputerBond, address _owner) {
+    constructor(
+        uint256 _proposerBond,
+        uint256 _disputeWindow,
+        uint256 _disputerBond,
+        uint256 _resolutionDeadline,
+        address _settlementEngine,
+        address _owner
+    ) {
+        if (_settlementEngine == address(0) || _owner == address(0)) {
+            revert OracleAdapter__InvalidAddress();
+        }
         i_proposerBond = _proposerBond;
         i_disputeWindow = _disputeWindow;
         i_disputerBond = _disputerBond;
+        i_resolutionDeadline = _resolutionDeadline;
+        i_settlementEngine = _settlementEngine;
 
         _transferOwnership(_owner);
     }
@@ -81,7 +108,18 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
     //////////////////////////
 
     function setResolver(address resolver, bool allowed) external onlyOwner {
+        if (resolver == address(0)) {
+            revert OracleAdapter__InvalidAddress();
+        }
         resolvers[resolver] = allowed;
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
     }
 
     /**
@@ -90,7 +128,17 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
      * @param market The market to propose an outcome for
      * @param outcome The outcome to propose
      */
-    function proposeOutcome(address market, Outcome outcome) external payable nonReentrant {
+    function proposeOutcome(address market, Outcome outcome) external payable nonReentrant whenNotPaused {
+        Market marketContract = Market(market);
+        // Allow proposals if market is closed OR expired (even if not explicitly closed)
+        if (!marketContract.isClosedOrExpired()) {
+            revert OracleAdapter__MarketNotClosed();
+        }
+        // Validate outcome is valid (YES or NO)
+        if (outcome != Outcome.YES && outcome != Outcome.NO) {
+            revert OracleAdapter__InvalidOutcome();
+        }
+
         OracleRequest storage request = requests[market];
 
         if (request.proposedAt != 0) {
@@ -113,7 +161,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
      * @dev Requires posting a bond
      * @param market The market outcome to dispute
      */
-    function disputeOutcome(address market) external payable nonReentrant {
+    function disputeOutcome(address market) external payable nonReentrant whenNotPaused {
         OracleRequest storage request = requests[market];
 
         if (request.proposedAt == 0) {
@@ -137,7 +185,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
 
     /**
      * @notice Finalize outcome after dispute window
-     * @dev Callable by SettlementEngine only
+     * @dev Callable by resolvers only, must resolve within deadline
      * @param market The market outcome to resolve
      * @param finalOutcome The final resolved outcome
      * @param isProposerCorrect whether proposer proposed outcome is correct or not
@@ -146,6 +194,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
         external
         nonReentrant
         onlyResolvers
+        whenNotPaused
     {
         OracleRequest storage request = requests[market];
         if (!request.disputed) {
@@ -153,6 +202,13 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
         }
         if (request.finalized) {
             revert OracleAdapter__OutcomeAlreadyResolved();
+        }
+        if (block.timestamp > request.proposedAt + i_disputeWindow + i_resolutionDeadline) {
+            revert OracleAdapter__ResolutionDeadlinePassed();
+        }
+        // Validate outcome is valid (YES or NO)
+        if (finalOutcome != Outcome.YES && finalOutcome != Outcome.NO) {
+            revert OracleAdapter__InvalidOutcome();
         }
 
         request.proposedOutcome = finalOutcome;
@@ -170,7 +226,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step {
         emit OutcomeFinalized(market, finalOutcome);
     }
 
-    function finalize(address market) external nonReentrant {
+    function finalize(address market) external nonReentrant onlySettlementEngine whenNotPaused {
         OracleRequest storage request = requests[market];
         if (request.proposedAt == 0) {
             revert OracleAdapter__OutcomeNotProposed();
