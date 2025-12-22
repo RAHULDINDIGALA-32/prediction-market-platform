@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
+/**
+ * @title Vault
+ * @author Rahul Dindigala
+ * @notice Secure ETH custody contract for prediction markets
+ * @dev Manages ETH deposits and withdrawals for individual markets with access control
+ */
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract Vault is ReentrancyGuard {
@@ -16,15 +22,15 @@ contract Vault is ReentrancyGuard {
     //////////////////////////
     /// EVENTS //////
     //////////////////////////
-    event Deposited(address indexed market, address indexed sender, uint256 amount);
-    event Withdrawn(address indexed market, address indexed receipient, uint256 amount);
+    event Deposited(address indexed market, address indexed sender, uint256 indexed amount);
+    event Withdrawn(address indexed market, address indexed recipient, uint256 indexed amount);
 
     //////////////////////////
     /// ERRORS  //////
     //////////////////////////
     error Vault__NotAuthorized();
     error Vault__InvalidMarket();
-    error Vault_InsufficientBalance();
+    error Vault__InsufficientBalance();
     error Vault__ZeroETHAmount();
     error Vault__ETHTransferFailed();
     error Vault__OnlyFactory();
@@ -57,6 +63,11 @@ contract Vault is ReentrancyGuard {
     //////////////////////////
     /// FUNCTIONS //////
     //////////////////////////
+    /**
+     * @notice Initialize the Vault contract
+     * @param _settlementEngine Address of the SettlementEngine contract
+     * @param _marketFactory Address of the MarketFactory contract
+     */
     constructor(address _settlementEngine, address _marketFactory) {
         if (_settlementEngine == address(0) || _marketFactory == address(0)) {
             revert Vault__InvalidAddress();
@@ -66,9 +77,10 @@ contract Vault is ReentrancyGuard {
     }
 
     /**
-     * @notice Register a market as valid
-     * @dev Only callable by MarketFactory
+     * @notice Register a market as valid for deposits
+     * @dev Only callable by MarketFactory when creating new markets
      * @param market The market address to register
+     * @custom:reverts Vault__InvalidMarket If market address is zero
      */
     function registerMarket(address market) external onlyFactory {
         if (market == address(0)) {
@@ -80,6 +92,13 @@ contract Vault is ReentrancyGuard {
     //////////////////////////
     /// External Functions ///
     //////////////////////////
+    /**
+     * @notice Deposit ETH to a market's vault balance
+     * @dev Only registered markets can receive deposits
+     * @param market The market address to deposit to
+     * @custom:reverts Vault__InvalidMarket If market is not registered or is zero address
+     * @custom:reverts Vault__ZeroETHAmount If no ETH is sent
+     */
     function deposit(address market) external payable nonZeroETHAmount(msg.value) {
         if (market == address(0)) {
             revert Vault__InvalidMarket();
@@ -92,6 +111,15 @@ contract Vault is ReentrancyGuard {
         emit Deposited(market, msg.sender, msg.value);
     }
 
+    /**
+     * @notice Withdraw ETH from a market's vault balance
+     * @dev Only callable by SettlementEngine during redemption
+     * @param market The market address to withdraw from
+     * @param recipient The address to send ETH to
+     * @param amount The amount of ETH to withdraw
+     * @custom:reverts Vault__InsufficientBalance If market balance is less than amount
+     * @custom:reverts Vault__ETHTransferFailed If ETH transfer fails
+     */
     function withdraw(address market, address recipient, uint256 amount)
         external
         nonReentrant
@@ -100,7 +128,7 @@ contract Vault is ReentrancyGuard {
     {
         uint256 marketBalance = marketBalances[market];
         if (marketBalance < amount) {
-            revert Vault_InsufficientBalance();
+            revert Vault__InsufficientBalance();
         }
 
         marketBalances[market] -= amount;
@@ -116,6 +144,11 @@ contract Vault is ReentrancyGuard {
     //////////////////////////
     /// View Functions ///
     //////////////////////////
+    /**
+     * @notice Get the ETH balance for a specific market
+     * @param market The market address to query
+     * @return uint256 The ETH balance held for the market
+     */
     function balanceOf(address market) external view returns (uint256) {
         return marketBalances[market];
     }

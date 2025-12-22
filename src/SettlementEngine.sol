@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
+/**
+ * @title SettlementEngine
+ * @author Rahul Dindigala
+ * @notice Handles market settlement and token redemption after oracle resolution
+ * @dev Manages the final settlement process and ETH payouts to winners
+ */
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {OutcomeToken} from "./OutcomeToken.sol";
@@ -22,8 +28,13 @@ contract SettlementEngine is ReentrancyGuard {
     //////////////////////////
     /// EVENTS ///
     //////////////////////////
-    event MarketSettled(address indexed market, Outcome outcome);
-    event Redeemed(address indexed market, address indexed user, uint256 winningTokenAmount, uint256 ethPaid);
+    event MarketSettled(address indexed market, Outcome indexed outcome);
+    event Redeemed(
+        address indexed market,
+        address indexed user,
+        uint256 indexed winningTokenAmount,
+        uint256 ethPaid
+    );
 
     //////////////////////////
     /// ERRORS ///
@@ -43,6 +54,11 @@ contract SettlementEngine is ReentrancyGuard {
     /// FUNCTIONS ///
     //////////////////////////
 
+    /**
+     * @notice Initialize the SettlementEngine contract
+     * @param _oracle Address of the OracleAdapter contract
+     * @param _vault Address of the Vault contract
+     */
     constructor(address _oracle, address _vault) {
         if (_oracle == address(0) || _vault == address(0)) {
             revert SettlementEngine__InvalidAddress();
@@ -53,7 +69,12 @@ contract SettlementEngine is ReentrancyGuard {
 
     /**
      * @notice Finalize a market after oracle resolution
-     * @param market The market to settle
+     * @dev Marks market as settled and updates market state. Can be called by anyone.
+     * @param market The market address to settle
+     * @custom:reverts SettlementEngine__MarketAlreadySettled If market already settled
+     * @custom:reverts SettlementEngine__MarketNotExpired If market hasn't expired
+     * @custom:reverts SettlementEngine__MarketNotClosed If market is not closed or expired
+     * @custom:reverts SettlementEngine__MarketNotResolved If oracle hasn't finalized outcome
      */
     function settleMarket(address market) external {
         if (marketSettled[market]) {
@@ -79,6 +100,16 @@ contract SettlementEngine is ReentrancyGuard {
         emit MarketSettled(market, outcome);
     }
 
+    /**
+     * @notice Redeem winning outcome tokens for ETH
+     * @dev Supports partial redemptions. Burns tokens and transfers ETH from vault.
+     * @param market The market address to redeem from
+     * @param amount The amount of tokens to redeem
+     * @custom:reverts SettlementEngine__MarketNotSettled If market not settled
+     * @custom:reverts SettlementEngine__InvalidAmount If amount is zero
+     * @custom:reverts SettlementEngine__InsufficientBalance If user doesn't have enough tokens
+     * @custom:reverts SettlementEngine__InsufficientVaultBalance If vault doesn't have enough ETH
+     */
     function redeem(address market, uint256 amount) external nonReentrant {
         if (!marketSettled[market]) {
             revert SettlementEngine__MarketNotSettled();

@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
+/**
+ * @title QuoteVerifier
+ * @author Rahul Dindigala
+ * @notice Verifies EIP-712 signed trade quotes and manages authorized signers
+ * @dev Prevents replay attacks through nonce tracking and quote hash validation
+ */
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
@@ -23,8 +29,8 @@ contract QuoteVerifier is EIP712, Ownable2Step {
     //////////////////////////
     /// EVENTS //////
     //////////////////////////
-    event SignerAdded(address signer);
-    event SignerRemoved(address signer);
+    event SignerAdded(address indexed signer);
+    event SignerRemoved(address indexed signer);
 
     //////////////////////////
     /// ERRORS //////
@@ -40,6 +46,10 @@ contract QuoteVerifier is EIP712, Ownable2Step {
     /// FUNCTIONS //////
     //////////////////////////
 
+    /**
+     * @notice Initialize the QuoteVerifier contract
+     * @param initialOwner Address that will own the contract
+     */
     constructor(address initialOwner) EIP712("PredictionMarket-QuoteVerifier", "1") {
         if (initialOwner == address(0)) {
             revert QuoteVerifier__InvalidAddress();
@@ -50,16 +60,36 @@ contract QuoteVerifier is EIP712, Ownable2Step {
     //////////////////////////
     /// External Functions ///
     //////////////////////////
+    /**
+     * @notice Add an authorized signer
+     * @param signer Address to authorize for signing quotes
+     */
     function addSigner(address signer) external onlyOwner {
         allowedSigners[signer] = true;
         emit SignerAdded(signer);
     }
 
+    /**
+     * @notice Remove an authorized signer
+     * @param signer Address to revoke signing authorization from
+     */
     function removeSigner(address signer) external onlyOwner {
         allowedSigners[signer] = false;
         emit SignerRemoved(signer);
     }
 
+    /**
+     * @notice Verify a signed trade quote
+     * @dev Validates signature, nonce, deadline, and signer authorization
+     * @param quote The trade quote to verify
+     * @param signature The EIP-712 signature of the quote
+     * @return quoteHash The hash of the verified quote (for replay prevention)
+     * @custom:reverts QuoteVerifier__QuoteExpired If quote deadline has passed
+     * @custom:reverts QuoteVerifier__InvalidAmount If quote amount is zero
+     * @custom:reverts QuoteVerifier__InvalidMarket If quote market doesn't match caller
+     * @custom:reverts QuoteVerifier__InvalidNonce If nonce is not greater than last used
+     * @custom:reverts QuoteVerifier__UnauthorizedSigner If signer is not authorized
+     */
     function verifyTradeQuote(TradeQuote calldata quote, bytes calldata signature)
         external
         view
@@ -106,10 +136,12 @@ contract QuoteVerifier is EIP712, Ownable2Step {
 
     /**
      * @notice Update nonce after successful trade execution
-     * @dev Only callable by Market contract
+     * @dev Only callable by Market contract to prevent replay attacks
      * @param trader The trader whose nonce to update
      * @param market The market address
      * @param nonce The nonce that was used
+     * @custom:reverts QuoteVerifier__InvalidMarket If caller is not the market contract
+     * @custom:reverts QuoteVerifier__InvalidNonce If nonce is not greater than current
      */
     function updateNonce(address trader, address market, uint256 nonce) external {
         // Only the market contract can update nonces
@@ -125,6 +157,11 @@ contract QuoteVerifier is EIP712, Ownable2Step {
     //////////////////////////
     /// VIEW FUNCTIONS ///
     //////////////////////////
+    /**
+     * @notice Check if an address is an authorized signer
+     * @param signer Address to check
+     * @return bool True if address is authorized to sign quotes
+     */
     function isSigner(address signer) external view returns (bool) {
         return allowedSigners[signer];
     }
