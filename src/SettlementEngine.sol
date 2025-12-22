@@ -23,7 +23,7 @@ contract SettlementEngine is ReentrancyGuard {
     /// EVENTS ///
     //////////////////////////
     event MarketSettled(address indexed market, Outcome outcome);
-    event Redeemed(address indexed market, address indexed user, uint256 yesTokenAmount, uint256 ethPaid);
+    event Redeemed(address indexed market, address indexed user, uint256 winningTokenAmount, uint256 ethPaid);
 
     //////////////////////////
     /// ERRORS ///
@@ -31,6 +31,7 @@ contract SettlementEngine is ReentrancyGuard {
     error SettlementEngine__MarketAlreadySettled();
     error SettlementEngine__MarketNotSettled();
     error SettlementEngine__MarketNotResolved();
+    error SettlementEngine__MarketNotExpired();
     error SettlementEngine__TokensAlreadyRedeemed();
     error SettlementEngine__InsufficientVaultBalance();
     error SettlementEngine__ZeroBalance();
@@ -40,8 +41,8 @@ contract SettlementEngine is ReentrancyGuard {
     //////////////////////////
 
     constructor(address _oracle, address _vault) {
-        i_oracle = IOracleAdapter(_oracle);
-        i_vault = IVault(_vault);
+        i_oracle = OracleAdapter(_oracle);
+        i_vault = Vault(_vault);
     }
 
     /**
@@ -51,6 +52,9 @@ contract SettlementEngine is ReentrancyGuard {
     function settleMarket(address market) external {
         if (marketSettled[market]) {
             revert SettlementEngine__MarketAlreadySettled();
+        }
+        if (block.timestamp < Market(market).i_endTime()) {
+            revert SettlementEngine__MarketNotExpired();
         }
         if (!i_oracle.isFinalized(market)) {
             revert SettlementEngine__MarketNotResolved();
@@ -70,7 +74,7 @@ contract SettlementEngine is ReentrancyGuard {
             revert SettlementEngine__TokensAlreadyRedeemed();
         }
 
-        bytes32 outcome = i_oracle.getFinalOutcome(market);
+        Outcome outcome = i_oracle.getFinalOutcome(market);
         address winningToken = Market(market).winningToken(outcome);
         uint256 payoutRate = Market(market).payoutRate();
 
