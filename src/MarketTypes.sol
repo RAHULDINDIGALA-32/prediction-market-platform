@@ -5,10 +5,8 @@ pragma solidity ^0.8.27;
 /// Type Declarations ////
 //////////////////////////
 enum MarketState {
-    CREATED,
     OPEN,
     CLOSED,
-    RESOLEVD,
     SETTLED
 }
 

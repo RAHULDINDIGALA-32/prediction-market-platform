@@ -13,12 +13,14 @@ contract Market is ReentrancyGuard, Pausable {
     //////////////////////////
     /// STATE VARIABLES //////
     //////////////////////////
-    bytes32 public immutable i_factory;
+    uint256 private constant PAYOUT_PER_TOKEN = 1 ether;
+
     Vault public immutable i_vault;
     QuoteVerifier public immutable i_quoteVerifier;
-
     OutcomeToken public immutable i_yesToken;
     OurtcomeToken public immutable i_notoken;
+
+    address public immutable i_factory;
 
     MarketState public state;
     uint256 public immutable i_endTime;
@@ -31,14 +33,12 @@ contract Market is ReentrancyGuard, Pausable {
     event TradeExecuted(address indexed trader, Outcome outcome, uint256 amount, uint256 cost, bytes32 quoteHash);
 
     event MarketClosed(uint256 timestamp);
-    event MarketResolved(Outcome Outcome);
+    event MarketSettled(Outcome Outcome);
 
     //////////////////////////
     /// ERRORS //////
-
     //////////////////////////
     error Market__MarketNotOpen();
-    error Market__MarketNotExpired();
     error Market__InvalidETHAmount();
     error Market__MarketExpired();
     error Market__QuoteAlreadyUsed();
@@ -79,21 +79,14 @@ contract Market is ReentrancyGuard, Pausable {
     //////////////////////////
     /// FUNCTIONS //////
     //////////////////////////
-    constructor(
-        address _factory,
-        address _vault,
-        address _quoteVerifier,
-        address _yesToken,
-        address _noToken,
-        uint256 _endTime
-    ) {
+    constructor(address _factory, address _vault, address _quoteVerifier, address _settlementEngine, uint256 _endTime) {
         i_factory = _factory;
         i_vault = Vault(_vault);
         i_quoteVerifier = QuoteVerifier(_quoteVerifier);
-        i_yesToken = OutcomeToken(_yesToken);
-        i_noToken = OutcomeToken(_noToken);
-
         i_endTime = _endTime;
+
+        i_yesToken = new OutcomeToken("Yes Token", "YES", address(this), _settlementEngine);
+        i_noToken = new OutcomeToken("No Token", "NO", address(this), _settlementEngine);
 
         state = State.OPEN;
     }
@@ -143,9 +136,9 @@ contract Market is ReentrancyGuard, Pausable {
         emit MarketClosed(block.timestamp);
     }
 
-    function resolveMarket(Outcome outcome) external onlyFactory {
-        state = MarketState.RESOLVED;
-        emit MarketResolved(outcome);
+    function settleMarket(Outcome outcome) external onlyFactory {
+        state = MarketState.SETTLED;
+        emit MarketSettled(outcome);
     }
 
     function pause() external onlyFactory {
@@ -154,5 +147,16 @@ contract Market is ReentrancyGuard, Pausable {
 
     function unpause() external onlyFactory {
         _unpause();
+    }
+
+    //////////////////////////
+    /// View Functions ///
+    //////////////////////////
+    function winningToken(Outcome outcome) external view returns (address) {
+        return outcome == Outcome.YES ? address(i_yesToken) : address(i_noToken);
+    }
+
+    function payoutRate() external view returns (uint256) {
+        return PAYOUT_PER_TOKEN;
     }
 }

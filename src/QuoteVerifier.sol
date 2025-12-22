@@ -5,9 +5,9 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-import {MarketTypes} from "./MarketTypes.sol";
+import {TradeQuote} from "./MarketTypes.sol";
 
-contract QuoteVerifier is ECDSA, EIP712, Ownable2Step {
+contract QuoteVerifier is EIP712, Ownable2Step {
     using ECDSA for bytes32;
 
     //////////////////////////
@@ -49,12 +49,12 @@ contract QuoteVerifier is ECDSA, EIP712, Ownable2Step {
         emit SignerAddedd(signer);
     }
 
-    function removeSigner(address signer) {
+    function removeSigner(address signer) external onlyOwner {
         isSigner[signer] = false;
         emit SignerRemoved(signer);
     }
 
-    function verifyTradeQuote(MarketTypes.TradeQuote calldata quote, byrtes calldata signature)
+    function verifyTradeQuote(TradeQuote calldata quote, bytes calldata signature)
         external
         view
         returns (bytes32 quoteHash)

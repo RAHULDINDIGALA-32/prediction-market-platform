@@ -3,35 +3,18 @@ pragma solidity ^0.8.27;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-//////////////////////////
-/// INTERFACES ///
-//////////////////////////
-interface IOracleAdapter {
-    function isResolved(address market) external view returns (bool);
-    function getOutcome(address market) external view returns (bytes32);
-}
-
-interface IVault {
-    function withdraw(address market, address recipient, uint256 amount) external;
-    function balanceOf(address market) external view returns (uint256);
-}
-
-interface IERC20Burnable {
-    function balanceOf(address user) external view returns (uint256);
-    function burn(address from, uint256 amount) external;
-}
-
-interface IMarket {
-    function winningToken(bytes32 outcome) external view returns (address);
-    function payoutPerToken() external view returns (uint256);
-}
+import {OutcomeToken} from "./OutcomeToken.sol";
+import {Vault} from "./Vault.sol";
+import {OracleAdapter} from "./OracleAdapter.sol";
+import {Outcome} from "./MarketTypes.sol";
+import {Market} from "./Market.sol";
 
 contract SettlementEngine is ReentrancyGuard {
     //////////////////////////
     /// STATE VARIABLES ///
     //////////////////////////
-    IOracleAdapter public immutable i_oracle;
-    IVault public immutable i_vault;
+    OracleAdapter public immutable i_oracle;
+    Vault public immutable i_vault;
 
     mapping(address market => bool isSettled) public marketSettled;
     mapping(address market => mapping(address user => bool isredeemed)) public redeemed;
@@ -39,7 +22,7 @@ contract SettlementEngine is ReentrancyGuard {
     //////////////////////////
     /// EVENTS ///
     //////////////////////////
-    event MarketSettled(address indexed market, bytes32 outcome);
+    event MarketSettled(address indexed market, Outcome outcome);
     event Redeemed(address indexed market, address indexed user, uint256 yesTokenAmount, uint256 ethPaid);
 
     //////////////////////////
@@ -69,11 +52,11 @@ contract SettlementEngine is ReentrancyGuard {
         if (marketSettled[market]) {
             revert SettlementEngine__MarketAlreadySettled();
         }
-        if (!i_oracle.isResolved(market)) {
+        if (!i_oracle.isFinalized(market)) {
             revert SettlementEngine__MarketNotResolved();
         }
 
-        bytes32 outcome = i_oracle.getOutcome(market);
+        Outcome outcome = i_oracle.getFinalOutcome(market);
 
         marketSettled[market] = true;
         emit MarketSettled(market, outcome);
@@ -87,11 +70,11 @@ contract SettlementEngine is ReentrancyGuard {
             revert SettlementEngine__TokensAlreadyRedeemed();
         }
 
-        bytes32 outcome = i_oracle.getOutcome(market);
-        address winningToken = IMarket(market).winningToken(outcome);
-        uint256 payoutRate = IMarket(market).payoutPerToken();
+        bytes32 outcome = i_oracle.getFinalOutcome(market);
+        address winningToken = Market(market).winningToken(outcome);
+        uint256 payoutRate = Market(market).payoutRate();
 
-        IERC20Burnable token = IERC20Burnable(winningToken);
+        OutcomeToken token = OutcomeToken(winningToken);
         uint256 userBalance = token.balanceOf(msg.sender);
 
         if (userBalance == 0) {

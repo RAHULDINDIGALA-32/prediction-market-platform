@@ -3,15 +3,17 @@ pragma solidity ^0.8.27;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+import {Outcome} from "./MarketTypes.sol";
+
 contract OracleAdapter is ReentrancyGuard {
     //////////////////////////
     /// TYPE DECLARATIONS //////
     //////////////////////////
     struct OracleRequest {
-        bytes32 proposedOutcome;
-        uint256 proposalTime;
+        Outcome proposedOutcome;
+        uint256 proposedAt;
         bool disputed;
-        bool resolved;
+        bool finalized;
     }
 
     //////////////////////////
@@ -22,14 +24,14 @@ contract OracleAdapter is ReentrancyGuard {
 
     address public immutable i_settlementEngine;
 
-    mapping(address proposer => OracleRequest proposalRequest) public requests;
+    mapping(address market => OracleRequest proposalRequest) public requests;
 
     //////////////////////////
     /// EVENTS //////
     //////////////////////////
-    event OutcomeProposed(address indexed market, bytes32 indexed outcome, uint256 timestamp);
+    event OutcomeProposed(address indexed market, Outcome outcome, uint256 timestamp);
     event OutcomeDisputed(address indexed market, address indexed disputer, uint256 timestamp);
-    event OutcomeResolved(address indexed market, bytes32 indexed finalOutcome);
+    event OutcomeFinalized(address indexed market, Outcome finalOutcome);
 
     //////////////////////////
     /// ERRORS //////
@@ -38,10 +40,12 @@ contract OracleAdapter is ReentrancyGuard {
     error OracleAdapter__OutcomeNotProposed();
     error OracleAdapter__NotAuthorized();
     error OracleAdapter__NotDisputed();
+    error OracleAdapter__Disputed();
     error OracleAdapter__AlreadyDisputed();
     error OracleAdapter__DisputeWindowClosed();
+    error OracleAdapter__OutcomeAlreadyFinalized();
     error OracleAdapter__OutcomeAlreadyResolved();
-    error OracleAdapter__InvalidOutcome();
+    error OracleAdapter__OutcomeNotFinalized();
     error OracleAdapter__InvalidETHAmount();
 
     //////////////////////////
@@ -73,18 +77,15 @@ contract OracleAdapter is ReentrancyGuard {
      * @param market The market to propose an outcome for
      * @param outcome The outcome to propose
      */
-    function proposeOutcome(address market, bytes32 outcome) external {
+    function proposeOutcome(address market, Outcome outcome) external {
         OracleRequest storage request = requests[market];
 
-        if (request.proposalTime != 0) {
+        if (request.proposedAt != 0) {
             revert OracleAdapter__OutcomeAlreadyProposed();
-        }
-        if (outcome == bytes32(0)) {
-            revert OracleAdapter__InvalidOutcome();
         }
 
         request.proposedOutcome = outcome;
-        request.proposalTime = block.timestamp;
+        request.proposedAt = block.timestamp;
 
         emit OutcomeProposed(market, outcome, block.timestamp);
     }
@@ -97,13 +98,13 @@ contract OracleAdapter is ReentrancyGuard {
     function disputeOutcome(address market) external payable nonReentrant {
         OracleRequest storage request = requests[market];
 
-        if (request.proposalTime == 0) {
+        if (request.proposedAt == 0) {
             revert OracleAdapter__OutcomeNotProposed();
         }
         if (request.disputed) {
             revert OracleAdapter__AlreadyDisputed();
         }
-        if (block.timestamp > request.proposalTime + i_disputeWindow) {
+        if (block.timestamp > request.proposedAt + i_disputeWindow) {
             revert OracleAdapter__DisputeWindowClosed();
         }
         if (msg.value != i_disputeBond) {
@@ -130,36 +131,50 @@ contract OracleAdapter is ReentrancyGuard {
      * @param market The market outcome to resolve
      * @param outcome The final resolved outcome
      */
-    function resolveOutcome(address market, bytes32 outcome) external onlySettlementEngine {
+    function resolveOutcome(address market, Outcome outcome) external onlySettlementEngine {
         OracleRequest storage request = requests[market];
         if (!request.disputed) {
             revert OracleAdapter__NotDisputed();
         }
-        if (request.resolved) {
+        if (request.finalized) {
             revert OracleAdapter__OutcomeAlreadyResolved();
-        }
-        if (outcome == bytes32(0)) {
-            revert OracleAdapter__InvalidOutcome();
         }
 
         request.proposedOutcome = outcome;
-        request.resolved = true;
+        request.finalized = true;
 
-        emit OutcomeResolved(market, outcome);
+        emit OutcomeFinalized(market, outcome);
+    }
+
+    function finalize(address market) external {
+        OracleRequest storage request = requests[market];
+        if (request.proposedAt == 0) {
+            revert OracleAdapter__OutcomeNotProposed();
+        }
+        if (request.finalized) {
+            revert OracleAdapter__OutcomeAlreadyFinalized();
+        }
+
+        if (request.disputed) {
+            revert OracleAdapter__Disputed();
+        }
+
+        request.finalized = true;
+
+        emit OutcomeFinalized(market, request.proposedOutcome);
     }
 
     //////////////////////////
     /// View Functions ///
     //////////////////////////
-    function getOutcome(address market) external view returns (bytes32) {
+    function isFinalized(address market) external view returns (bool) {
+        return requests[market].finalized;
+    }
+
+    function getFinalOutcome(address market) external view returns (Outcome) {
+        if (!requests[market].finalized) {
+            revert OracleAdapter__OutcomeNotFinalized();
+        }
         return requests[market].proposedOutcome;
-    }
-
-    function isDisputed(address market) external view returns (bool) {
-        return requests[market].disputed;
-    }
-
-    function isResolved(address market) external view returns (bool) {
-        return requests[market].resolved;
     }
 }
