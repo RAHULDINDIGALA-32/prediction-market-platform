@@ -5,7 +5,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-import {TradeQuote} from "./MarketTypes.sol";
+import {TradeQuote, Outcome} from "./MarketTypes.sol";
 
 contract QuoteVerifier is EIP712, Ownable2Step {
     using ECDSA for bytes32;
@@ -14,43 +14,43 @@ contract QuoteVerifier is EIP712, Ownable2Step {
     /// STATE VARIABLES ///
     //////////////////////////
     bytes32 private constant TRADE_QUOTE_TYPEHASH = keccak256(
-        "TradeQuote(address trader,address market,uint8 outcome,uint256 amount,uint256 cost,uint256 deadline,uint256 nonce)"
+        "TradeQuote(address trader,address market,Outcome outcome,uint256 amount,uint256 cost,uint256 deadline,uint256 nonce)"
     );
 
-    mapping(address => bool) isSigner;
+    mapping(address signer => bool allowed) allowedSigners;
 
     //////////////////////////
     /// EVENTS //////
     //////////////////////////
-    event SignerAddedd(address signer);
+    event SignerAdded(address signer);
     event SignerRemoved(address signer);
 
     //////////////////////////
     /// ERRORS //////
     //////////////////////////
     error QuoteVerifier__UnauthorizedSigner();
-    error QuoteVerifier__InvalidSignature();
-    error QuoteVerifier__InvalidDeadline();
-    error QuoteVerifier__InvalidNonce();
     error QuoteVerifier__QuoteExpired();
     error QuoteVerifier__InvalidAmount();
+    error QuoteVerifier__InvalidMarket();
 
     //////////////////////////
     /// FUNCTIONS //////
     //////////////////////////
 
-    constructor() EIP712("PredictionMarket-QuoteVerifier", "1") {}
+    constructor(address initialOwner) EIP712("PredictionMarket-QuoteVerifier", "1") {
+        _transferOwnership(initialOwner);
+    }
 
     //////////////////////////
     /// External Functions ///
     //////////////////////////
     function addSigner(address signer) external onlyOwner {
-        isSigner[signer] = true;
-        emit SignerAddedd(signer);
+        allowedSigners[signer] = true;
+        emit SignerAdded(signer);
     }
 
     function removeSigner(address signer) external onlyOwner {
-        isSigner[signer] = false;
+        allowedSigners[signer] = false;
         emit SignerRemoved(signer);
     }
 
@@ -61,6 +61,14 @@ contract QuoteVerifier is EIP712, Ownable2Step {
     {
         if (block.timestamp > quote.deadline) {
             revert QuoteVerifier__QuoteExpired();
+        }
+        if(quote.amount == 0) {
+            revert QuoteVerifier__InvalidAmount()
+        }
+
+        // Prevent cross-market replay
+        if (quote.market != msg.sender) {
+            revert QuoteVerifier__InvalidMarket();
         }
 
         quoteHash = _hashTypedDataV4(
@@ -80,8 +88,15 @@ contract QuoteVerifier is EIP712, Ownable2Step {
 
         address recoverredSigner = ECDSA.recover(quoteHash, signature);
 
-        if (!isSigner[recoverredSigner]) {
+        if (!allowedSigners[recoverredSigner]) {
             revert QuoteVerifier__UnauthorizedSigner();
         }
+    }
+
+    //////////////////////////
+    /// VIEW FUNCTIONS ///
+    //////////////////////////
+    function isSigner(address signer) external view returns (bool) {
+        return allowedSigners[signer];
     }
 }

@@ -1,10 +1,9 @@
-// SPDX-License-Identifier: MIT;
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract OutcomeToken is ERC20 {
-
     //////////////////////////
     /// State Variables //////
     //////////////////////////
@@ -21,14 +20,14 @@ contract OutcomeToken is ERC20 {
     /// Modifiers //////
     //////////////////////////
     modifier onlyMarket() {
-        if(msg.sender != i_market) {
+        if (msg.sender != i_market) {
             revert OutcomeToken__OnlyMarket();
         }
         _;
     }
 
     modifier onlySettlementEngine() {
-        if(msg.sender != i_settlementEngine) {
+        if (msg.sender != i_settlementEngine) {
             revert OutcomeToken__OnlySettlementEngine();
         }
         _;
@@ -37,12 +36,9 @@ contract OutcomeToken is ERC20 {
     //////////////////////////
     /// Functions //////
     //////////////////////////
-    constructor(
-        string memory _name,
-        string memory _symbol,
-        address _market,
-        address _settlementEngine
-    ) ERC20(_name, _symbol) {
+    constructor(string memory _name, string memory _symbol, address _market, address _settlementEngine)
+        ERC20(_name, _symbol)
+    {
         i_market = _market;
         i_settlementEngine = _settlementEngine;
     }
@@ -57,5 +53,4 @@ contract OutcomeToken is ERC20 {
     function burn(address from, uint256 amount) external onlySettlementEngine {
         _burn(from, amount);
     }
-
 }

@@ -18,7 +18,7 @@ contract Market is ReentrancyGuard, Pausable {
     Vault public immutable i_vault;
     QuoteVerifier public immutable i_quoteVerifier;
     OutcomeToken public immutable i_yesToken;
-    OurtcomeToken public immutable i_notoken;
+    OutcomeToken public immutable i_noToken;
 
     address public immutable i_factory;
 
@@ -41,6 +41,7 @@ contract Market is ReentrancyGuard, Pausable {
     error Market__MarketNotOpen();
     error Market__InvalidETHAmount();
     error Market__MarketExpired();
+    error Market__MarketNotExpired();
     error Market__QuoteAlreadyUsed();
     error Market__Unauthorized();
 
@@ -88,7 +89,7 @@ contract Market is ReentrancyGuard, Pausable {
         i_yesToken = new OutcomeToken("Yes Token", "YES", address(this), _settlementEngine);
         i_noToken = new OutcomeToken("No Token", "NO", address(this), _settlementEngine);
 
-        state = State.OPEN;
+        state = MarketState.OPEN;
     }
 
     //////////////////////////
@@ -114,9 +115,9 @@ contract Market is ReentrancyGuard, Pausable {
         usedQuoteHashes[quoteHash] = true;
 
         if (quote.outcome == Outcome.YES) {
-            yesToken.mint(msg.sender, quote.amount);
+            i_yesToken.mint(msg.sender, quote.amount);
         } else {
-            noToken.mint(msg.sender, quote.amount);
+            i_noToken.mint(msg.sender, quote.amount);
         }
 
         i_vault.deposit{value: msg.value}(address(this));
