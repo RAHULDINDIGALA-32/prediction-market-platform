@@ -20,11 +20,11 @@ export enum Outcome {
 }
 
 export type TradeQuote = {
-    trader: `0x${string}`;
-    market: `0x${string}`;
-    outcome: Outcome;
+    marketId: string;
+    side: "YES" | "NO";
     amount: bigint;
-    cost: number;
-    deadline: number;
-    nonce: number;
-};
+    cost: bigint;
+    expiresAt: number;
+    version: number;
+  };
+  
