@@ -1,26 +1,19 @@
-const SCALE = 10n ** 18n;
-
-function expApprox(x: bigint): bigint {
-    let sum = SCALE;
-    let term = SCALE;
-
-    for (let i = 1n; i <= 10n; i++) {
-        term = (term * x) / (i * SCALE);
-        sum += term;
-    }
-
-    return sum;
-}
-
-function lnApprox(x: bigint): bigint {             
-    return x - SCALE;
-}
-
+const SCALE = 1e18;
 
 export function lmsrCost(qYes: bigint, qNo: bigint, b: bigint): bigint {
-    const expYes = expApprox(qYes * SCALE / b);
-    const expNo = expApprox(qNo * SCALE / b);
-    
-    const sum = expYes + expNo;
-    return (b* lnApprox(sum)) / SCALE;
+  // Convert to numbers; this assumes values are within safe numeric ranges.
+  const bNum = Number(b);
+  const a = Number(qYes) / bNum;
+  const c = Number(qNo) / bNum;
+
+  const expA = Math.exp(a);
+  const expC = Math.exp(c);
+  const sum = expA + expC;
+  const lnSum = Math.log(sum);
+
+  const cost = bNum * lnSum;
+
+  // Return fixed-point scaled value
+  const scaled = Math.round(cost * SCALE);
+  return BigInt(scaled);
 }

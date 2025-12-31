@@ -8,10 +8,10 @@ const toBigInt = (value: Decimal) => BigInt(value.toString());
 export async function executeTrade({
     marketId,
     side,
-    amount,
     expectedCost,
     expectedVersion,
     trader,
+    isSell = false,
 } : {
     marketId: string;
     side: "YES" | "NO";
@@ -19,6 +19,7 @@ export async function executeTrade({
     expectedCost: Decimal;
     expectedVersion: number;
     trader: string;
+    isSell?: boolean;
 }) {
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const market = await tx.market.findUnique({
@@ -40,7 +41,8 @@ export async function executeTrade({
         const { newState, cost } = applyTrade(
             marketState,
             side,
-            toBigInt(amount)
+            toBigInt(amount),
+            isSell
         );
 
         if (cost !== toBigInt(expectedCost)) {

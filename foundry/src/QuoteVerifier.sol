@@ -20,7 +20,7 @@ contract QuoteVerifier is EIP712, Ownable2Step {
     /// STATE VARIABLES ///
     //////////////////////////
     bytes32 private constant TRADE_QUOTE_TYPEHASH = keccak256(
-        "TradeQuote(address trader,address market,Outcome outcome,uint256 amount,uint256 cost,uint256 deadline,uint256 nonce)"
+        "TradeQuote(address trader,address market,Outcome outcome,uint256 amount,uint256 cost,uint256 deadline,uint256 nonce,bool isSell,uint256 minAmountOut,uint256 minReturn)"
     );
 
     mapping(address signer => bool allowed) allowedSigners;
@@ -122,7 +122,10 @@ contract QuoteVerifier is EIP712, Ownable2Step {
                     quote.amount,
                     quote.cost,
                     quote.deadline,
-                    quote.nonce
+                    quote.nonce,
+                    quote.isSell,
+                    quote.minAmountOut,
+                    quote.minReturn
                 )
             )
         );

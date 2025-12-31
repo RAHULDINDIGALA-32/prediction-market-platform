@@ -134,7 +134,7 @@ contract Market is ReentrancyGuard, Pausable {
      * @custom:reverts Market__QuoteAlreadyUsed If quote hash was already used
      * @custom:reverts Market__SlippageExceeded If received tokens are less than minAmountOut
      */
-    function executeTrade(TradeQuote calldata quote, bytes calldata signature, uint256 minAmountOut)
+    function executeTrade(TradeQuote calldata quote, bytes calldata signature, uint256 minAmountOut, uint256 minReturn)
         external
         payable
         nonReentrant
@@ -142,8 +142,21 @@ contract Market is ReentrancyGuard, Pausable {
         onlyOpen
         notExpired
     {
-        if (msg.value != quote.cost) {
-            revert Market__InvalidETHAmount();
+
+        // Caller must be the intended trader
+        if (msg.sender != quote.trader) {
+            revert Market__Unauthorized();
+        }
+
+        if (!quote.isSell) {
+            if (msg.value != quote.cost) {
+                revert Market__InvalidETHAmount();
+            }
+        } else {
+            // sell trades must not send ETH
+            if (msg.value != 0) {
+                revert Market__InvalidETHAmount();
+            }
         }
 
         bytes32 quoteHash = i_quoteVerifier.verifyTradeQuote(quote, signature);
@@ -156,18 +169,36 @@ contract Market is ReentrancyGuard, Pausable {
         // Update nonce after successful verification
         i_quoteVerifier.updateNonce(quote.trader, address(this), quote.nonce);
 
-        // Slippage protection: ensure user receives at least minAmountOut tokens
-        if (quote.amount < minAmountOut) {
-            revert Market__SlippageExceeded();
-        }
+        if (!quote.isSell) {
+            // Slippage protection: ensure user receives at least minAmountOut tokens
+            if (quote.amount < minAmountOut) {
+                revert Market__SlippageExceeded();
+            }
 
-        if (quote.outcome == Outcome.YES) {
-            i_yesToken.mint(msg.sender, quote.amount);
+            if (quote.outcome == Outcome.YES) {
+                i_yesToken.mint(msg.sender, quote.amount);
+            } else {
+                i_noToken.mint(msg.sender, quote.amount);
+            }
+
+            // deposit ETH into the vault for this market
+            i_vault.deposit{value: msg.value}(address(this));
         } else {
-            i_noToken.mint(msg.sender, quote.amount);
-        }
+            // SELL: burn user's outcome tokens and refund ETH from vault
+            uint256 refund = quote.cost;
+            if (refund < minReturn) {
+                revert Market__SlippageExceeded();
+            }
 
-        i_vault.deposit{value: msg.value}(address(this));
+            if (quote.outcome == Outcome.YES) {
+                i_yesToken.burnFromUser(msg.sender, quote.amount);
+            } else {
+                i_noToken.burnFromUser(msg.sender, quote.amount);
+            }
+
+            // withdraw refund from vault to trader
+            i_vault.marketWithdraw(msg.sender, refund);
+        }
 
         emit TradeExecuted(msg.sender, quote.outcome, quote.amount, quote.cost, quoteHash);
     }

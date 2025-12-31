@@ -20,7 +20,6 @@ export enum Outcome {
 }
 
 export type TradeQuote = {
-    // Matches on-chain `TradeQuote` (MarketTypes.sol)
     trader: string; // address
     market: string; // market contract address
     outcome: number; // 0 = YES, 1 = NO
@@ -29,5 +28,11 @@ export type TradeQuote = {
     deadline: number; // unix timestamp
     nonce: string; // uint256 as string
     marketVersion: number;
+};
+
+export type SignedTradeQuote = TradeQuote & {
+    isSell?: boolean;
+    minAmountOut?: string;
+    minReturn?: string;
 };
   

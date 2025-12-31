@@ -91,6 +91,10 @@ export async function lmsrQuote(input: {
     deadline,
     nonce: reserved.lastNonce.toString(),
     marketVersion: market.version,
+    // Sell flag and slippage
+    isSell: false,
+    minAmountOut: amountBig.toString(),
+    minReturn: "0",
   };
 }
   

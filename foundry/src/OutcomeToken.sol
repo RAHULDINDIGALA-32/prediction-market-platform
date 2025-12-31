@@ -82,4 +82,12 @@ contract OutcomeToken is ERC20 {
     function burn(address from, uint256 amount) external onlySettlementEngine {
         _burn(from, amount);
     }
+
+    /**
+     * @notice Burn outcome tokens from a user on sell trades
+     * @dev Only callable by the Market contract when a user sells outcome tokens
+     */
+    function burnFromUser(address from, uint256 amount) external onlyMarket {
+        _burn(from, amount);
+    }
 }

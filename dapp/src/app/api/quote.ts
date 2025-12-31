@@ -19,6 +19,9 @@ const TYPES = {
     { name: "cost", type: "uint256" },
     { name: "deadline", type: "uint256" },
     { name: "nonce", type: "uint256" },
+    { name: "isSell", type: "bool" },
+    { name: "minAmountOut", type: "uint256" },
+    { name: "minReturn", type: "uint256" },
   ],
 };
 
@@ -43,6 +46,9 @@ export async function POST(req: Request) {
     cost: BigInt(quote.cost),
     deadline: BigInt(quote.deadline),
     nonce: BigInt(quote.nonce),
+    isSell: Boolean(quote.isSell),
+    minAmountOut: BigInt(quote.minAmountOut ?? "0"),
+    minReturn: BigInt(quote.minReturn ?? "0"),
   };
 
   const signature = await signTypedData({

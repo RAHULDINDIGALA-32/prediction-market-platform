@@ -141,6 +141,37 @@ contract Vault is ReentrancyGuard {
         emit Withdrawn(market, recipient, amount);
     }
 
+    /**
+     * @notice Withdraw ETH from a market's vault balance on sell trades
+     * @dev Callable by the registered Market contract itself to refund sellers
+     * @param recipient The address to send ETH to
+     * @param amount The amount of ETH to withdraw
+     */
+    function marketWithdraw(address recipient, uint256 amount)
+        external
+        nonReentrant
+        nonZeroETHAmount(amount)
+    {
+        // Caller must be a registered market
+        if (!validMarkets[msg.sender]) {
+            revert Vault__InvalidMarket();
+        }
+
+        uint256 marketBalance = marketBalances[msg.sender];
+        if (marketBalance < amount) {
+            revert Vault__InsufficientBalance();
+        }
+
+        marketBalances[msg.sender] -= amount;
+
+        (bool success,) = recipient.call{value: amount}("");
+        if (!success) {
+            revert Vault__ETHTransferFailed();
+        }
+
+        emit Withdrawn(msg.sender, recipient, amount);
+    }
+
     //////////////////////////
     /// View Functions ///
     //////////////////////////

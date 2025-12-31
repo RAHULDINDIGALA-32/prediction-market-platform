@@ -23,5 +23,8 @@ struct TradeQuote {
     uint256 cost;
     uint256 deadline;
     uint256 nonce;
+    bool isSell;
+    uint256 minAmountOut; // for buys: minimum outcome tokens expected
+    uint256 minReturn; // for sells: minimum ETH expected
 }
 
