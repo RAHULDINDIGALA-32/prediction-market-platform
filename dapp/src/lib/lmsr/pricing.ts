@@ -29,9 +29,58 @@ export async function lmsrQuote(input: {
   const { newState, cost } = applyTrade(state, input.side, amountBig);
 
   const deadline = Math.floor(Date.now() / 1000) + 60; // 1 minute validity
+  // Reserve a server-side nonce for this trader+market atomically
+  const result = await prisma.$transaction(async (tx) => {
+    const existing = await tx.traderNonce.findUnique({
+      where: {
+        trader_marketId: {
+          trader: input.trader,
+          marketId: input.marketId,
+        },
+      },
+    });
 
-  // Use market.version + 1 as a monotonic nonce (must be > on-chain last nonce)
-  const nonce = BigInt(market.version + 1);
+    // If not exists, create with lastNonce = market.version (so newNonce > any past)
+    if (!existing) {
+      const initial = await tx.traderNonce.create({
+        data: {
+          trader: input.trader,
+          marketId: input.marketId,
+          lastNonce: BigInt(market.version),
+        },
+      });
+      return initial;
+    }
+
+    // otherwise return existing
+    return existing;
+  });
+
+  // Now increment lastNonce in a separate transaction to reserve the next nonce
+  const reserved = await prisma.$transaction(async (tx) => {
+    const current = await tx.traderNonce.findUnique({
+      where: {
+        trader_marketId: {
+          trader: input.trader,
+          marketId: input.marketId,
+        },
+      },
+    });
+    const last = current?.lastNonce ?? BigInt(market.version);
+    const newNonce = BigInt(last) + 1n;
+    const updated = await tx.traderNonce.update({
+      where: {
+        trader_marketId: {
+          trader: input.trader,
+          marketId: input.marketId,
+        },
+      },
+      data: {
+        lastNonce: newNonce,
+      },
+    });
+    return updated;
+  });
 
   return {
     trader: input.trader,
@@ -40,7 +89,7 @@ export async function lmsrQuote(input: {
     amount: amountBig.toString(),
     cost: cost.toString(),
     deadline,
-    nonce: nonce.toString(),
+    nonce: reserved.lastNonce.toString(),
     marketVersion: market.version,
   };
 }

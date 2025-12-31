@@ -14,3 +14,16 @@ model Market {
 
   trades       Trade[]
 }
+
+model TraderNonce {
+  id        String   @id @default(uuid())
+  trader    String
+  marketId  String
+  lastNonce BigInt  @default(0)
+  updatedAt DateTime @updatedAt
+
+  market    Market   @relation(fields: [marketId], references: [id])
+
+  @@unique([trader, marketId])
+  @@index([marketId])
+}
