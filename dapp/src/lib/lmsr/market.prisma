@@ -1,0 +1,16 @@
+model Market {
+  id           String   @id
+  status       MarketStatus
+
+  qYes         Decimal
+  qNo          Decimal
+  b            Decimal
+
+  collateral   Decimal
+
+  version      Int      
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  trades       Trade[]
+}

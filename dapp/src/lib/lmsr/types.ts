@@ -20,11 +20,14 @@ export enum Outcome {
 }
 
 export type TradeQuote = {
-    marketId: string;
-    side: "YES" | "NO";
-    amount: bigint;
-    cost: bigint;
-    expiresAt: number;
-    version: number;
-  };
+    // Matches on-chain `TradeQuote` (MarketTypes.sol)
+    trader: string; // address
+    market: string; // market contract address
+    outcome: number; // 0 = YES, 1 = NO
+    amount: string; // decimal/uint256 as string
+    cost: string; // wei uint256 as string
+    deadline: number; // unix timestamp
+    nonce: string; // uint256 as string
+    marketVersion: number;
+};
   

@@ -1,0 +1,11 @@
+enum MarketStatus {
+  OPEN
+  LOCKED
+  RESOLVED
+  SETTLED
+}
+
+enum TradeSide {
+  YES
+  NO
+}

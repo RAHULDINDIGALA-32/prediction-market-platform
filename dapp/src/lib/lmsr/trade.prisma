@@ -1,0 +1,16 @@
+model Trade {
+  id          String   @id @default(uuid())
+  marketId    String
+  side        TradeSide
+  amount      Decimal
+  cost        Decimal
+
+  trader      String
+  marketVer   Int
+
+  createdAt   DateTime @default(now())
+
+  market      Market   @relation(fields: [marketId], references: [id])
+
+  @@index([marketId])
+}
