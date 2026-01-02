@@ -1,0 +1,22 @@
+name: Forge CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  forge-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Foundry
+        uses: smartcontractkit/setup-foundry@v1
+      - name: Install dependencies
+        run: |
+          cd dapp || true
+          npm ci || true
+      - name: Run forge tests
+        run: forge test -v
+        working-directory: foundry
