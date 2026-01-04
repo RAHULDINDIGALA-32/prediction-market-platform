@@ -24,26 +24,43 @@ async function main() {
       const qh = quoteHash.toString();
       console.log("TradeExecuted event:", { trader, outcome: Number(outcome), amount: amount.toString(), cost: cost.toString(), quoteHash: qh });
 
-      // Find signed quote by hash
+      // Post to reconcile endpoint for server-side processing
+      const apiUrl = process.env.SERVER_URL || 'http://localhost:3000/api/admin/reconcile';
+      const adminSecret = process.env.ADMIN_SECRET || '';
+
+      const payload = {
+        quoteHash: qh,
+        event: {
+          trader: trader.toString(),
+          outcome: Number(outcome),
+          amount: amount.toString(),
+          cost: cost.toString(),
+          marketId: parsed.address, // fallback: event emitter address (market)
+          isSell: false,
+          marketVersion: 0
+        }
+      };
+
+      // Try to guess DB marketId by looking up SignedQuote first
       const signed = await prisma.signedQuote.findUnique({ where: { quoteHash: qh } });
-      if (!signed) {
-        console.log("No matching signed quote found for hash", qh);
-        return;
-      }
+      if (signed) payload.event.marketId = signed.marketId;
 
-      // Update signed quote status and trader nonce
-      await prisma.$transaction(async (tx) => {
-        await tx.signedQuote.update({ where: { quoteHash: qh }, data: { status: "COMMITTED" } });
+      // Optionally include marketVersion from signed quote
+      if (signed && signed.marketVersion) payload.event.marketVersion = signed.marketVersion;
 
-        // update server-side nonce to the nonce used
-        await tx.traderNonce.upsert({
-          where: { trader_marketId: { trader: signed.trader, marketId: signed.marketId } },
-          create: { trader: signed.trader, marketId: signed.marketId, lastNonce: signed.nonce },
-          update: { lastNonce: signed.nonce },
-        });
+      const fetchFn = globalThis.fetch || (await import('node-fetch')).default;
+      const res = await fetchFn(apiUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-admin-secret': adminSecret },
+        body: JSON.stringify(payload),
       });
 
-      console.log("Reconciled signed quote and updated nonce for", signed.trader);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('Reconcile failed:', res.status, text);
+      } else {
+        console.log('Reconcile succeeded for', qh);
+      }
     } catch (err) {
       console.error("Error handling event:", err);
     }

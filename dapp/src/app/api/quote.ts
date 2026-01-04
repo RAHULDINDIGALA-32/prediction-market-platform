@@ -98,7 +98,7 @@ export async function POST(req: Request) {
     minReturn: message.minReturn.toString(),
   };
 
-  const quoteHash = ethers._TypedDataEncoder.hash(domain, types, typedDataMessage);
+  const quoteHash = ethers.TypedDataEncoder.hash(domain, types, typedDataMessage);
 
   // persist the signed quote so we can reconcile when it's executed on-chain
   try {
@@ -112,6 +112,7 @@ export async function POST(req: Request) {
         cost: quote.cost,
         nonce: BigInt(quote.nonce) as any,
         isSell: Boolean(quote.isSell),
+        marketVersion: quote.marketVersion,
         minAmountOut: quote.minAmountOut ?? undefined,
         minReturn: quote.minReturn ?? undefined,
       },

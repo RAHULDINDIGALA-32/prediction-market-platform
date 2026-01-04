@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "sync-events": "node scripts/syncEvents.js",
+    "register-market": "node scripts/registerMarketCli.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

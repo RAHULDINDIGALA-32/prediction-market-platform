@@ -39,6 +39,7 @@ model SignedQuote {
   cost       Decimal
   nonce      BigInt
   isSell     Boolean  @default(false)
+  marketVersion Int
   minAmountOut Decimal?
   minReturn   Decimal?
   status     SignedQuoteStatus @default(PENDING)
