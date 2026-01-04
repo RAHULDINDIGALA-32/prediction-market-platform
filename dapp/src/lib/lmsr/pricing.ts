@@ -7,6 +7,7 @@ export async function lmsrQuote(input: {
   trader: string;
   side: "YES" | "NO";
   amount: string | number | Decimal;
+  isSell?: boolean;
 }) {
   const market = await prisma.market.findUnique({ where: { id: input.marketId } });
 
@@ -82,9 +83,12 @@ export async function lmsrQuote(input: {
     return updated;
   });
 
+  const marketAddress = market.contractAddress ?? market.id;
+
   return {
     trader: input.trader,
-    market: market.id,
+    market: marketAddress,
+    marketId: market.id,
     outcome: input.side === "YES" ? 0 : 1,
     amount: amountBig.toString(),
     cost: cost.toString(),
@@ -92,9 +96,9 @@ export async function lmsrQuote(input: {
     nonce: reserved.lastNonce.toString(),
     marketVersion: market.version,
     // Sell flag and slippage
-    isSell: false,
-    minAmountOut: amountBig.toString(),
-    minReturn: "0",
+    isSell: Boolean(input.isSell ?? false),
+    minAmountOut: input.isSell ? "0" : amountBig.toString(),
+    minReturn: input.isSell ? amountBig.toString() : "0",
   };
 }
   

@@ -1,5 +1,6 @@
 model Market {
   id           String   @id
+  contractAddress String? @unique
   status       MarketStatus
 
   qYes         Decimal
@@ -26,4 +27,30 @@ model TraderNonce {
 
   @@unique([trader, marketId])
   @@index([marketId])
+}
+
+model SignedQuote {
+  id         String   @id @default(uuid())
+  trader     String
+  marketId   String
+  quoteHash  String   @unique
+  signature  String
+  amount     Decimal
+  cost       Decimal
+  nonce      BigInt
+  isSell     Boolean  @default(false)
+  minAmountOut Decimal?
+  minReturn   Decimal?
+  status     SignedQuoteStatus @default(PENDING)
+  createdAt  DateTime @default(now())
+
+  market     Market   @relation(fields: [marketId], references: [id])
+
+  @@index([marketId])
+}
+
+enum SignedQuoteStatus {
+  PENDING
+  COMMITTED
+  CANCELLED
 }
