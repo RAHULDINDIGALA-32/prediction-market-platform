@@ -13,15 +13,15 @@ if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
 
-// Test database connection on startup (optional, helps catch connection issues early)
+// Test database connection on startup
 if (process.env.NODE_ENV === "development") {
   prisma.$connect().catch((err) => {
     console.warn(
-      "⚠️  Database connection warning:",
+      "Database connection warning:",
       err instanceof Error ? err.message : "Unknown error"
     );
     console.warn(
-      "💡 Make sure DATABASE_URL in .env.local is correctly configured for your Supabase database."
+      "Make sure DATABASE_URL in .env is correctly configured for database."
     );
   });
 }
