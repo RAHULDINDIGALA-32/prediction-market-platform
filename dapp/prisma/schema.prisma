@@ -1,0 +1,101 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MarketStatus {
+  OPEN
+  LOCKED
+  RESOLVED
+  SETTLED
+}
+
+enum TradeSide {
+  YES
+  NO
+}
+
+enum SignedQuoteStatus {
+  PENDING
+  COMMITTED
+  CANCELLED
+}
+
+model Market {
+  id             String   @id
+  contractAddress String? @unique
+  status         MarketStatus
+
+  qYes           Decimal
+  qNo            Decimal
+  b              Decimal
+
+  collateral     Decimal
+
+  version        Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  trades         Trade[]
+  traderNonces   TraderNonce[]
+  signedQuotes   SignedQuote[]
+}
+
+model TraderNonce {
+  id        String   @id @default(uuid())
+  trader    String
+  marketId  String
+  lastNonce BigInt   @default(0)
+  updatedAt DateTime @updatedAt
+
+  market    Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@unique([trader, marketId])
+  @@index([marketId])
+}
+
+model SignedQuote {
+  id            String   @id @default(uuid())
+  trader        String
+  marketId      String
+  quoteHash     String   @unique
+  signature     String
+  amount        Decimal
+  cost          Decimal
+  nonce         BigInt
+  isSell        Boolean  @default(false)
+  marketVersion Int
+  minAmountOut  Decimal?
+  minReturn     Decimal?
+  status        SignedQuoteStatus @default(PENDING)
+  createdAt     DateTime @default(now())
+
+  market        Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([marketId])
+}
+
+model Trade {
+  id        String   @id @default(uuid())
+  marketId  String
+  side      TradeSide
+  amount    Decimal
+  cost      Decimal
+
+  trader    String
+  marketVer Int
+
+  createdAt DateTime @default(now())
+
+  market    Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([marketId])
+}
+

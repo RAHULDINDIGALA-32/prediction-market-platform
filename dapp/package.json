@@ -8,6 +8,9 @@
     "register-market": "node scripts/registerMarketCli.js",
     "build": "next build",
     "start": "next start",
+    "prisma:generate": "npx prisma generate",
+    "prisma:migrate": "npx prisma migrate dev",
+    "prisma:studio": "npx prisma studio",
     "lint": "eslint"
   },
   "dependencies": {
@@ -29,6 +32,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "prisma": "^6.0.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
