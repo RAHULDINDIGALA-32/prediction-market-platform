@@ -1,4 +1,4 @@
-import AppShell from "@/components/AppShell";
+import AppShell from "@/components/NavBar";
 import OraclePanel from "@/components/roles/OraclePanel";
 
 export default function OraclePage() {

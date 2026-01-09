@@ -11,15 +11,16 @@ type Props = {
 
 const routes = [
   { href: "/", label: "Markets" },
-  { href: "/oracle", label: "Oracle" },
+  { href: "/portfolio", label: "Portfolio" },
   { href: "/settlement", label: "Settlement" },
+  { href: "/oracle", label: "Oracle" },
 ];
 
 function classNames(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-export default function AppShell({ children }: Props) {
+export default function NavBar({ children }: Props) {
   const pathname = usePathname();
 
   return (
@@ -32,7 +33,7 @@ export default function AppShell({ children }: Props) {
             </div>
             <div>
               <div className="text-sm font-semibold tracking-tight">
-                Prediction Market
+                Prediction Markets
               </div>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 On-chain binary markets with optimistic oracle
@@ -65,7 +66,6 @@ export default function AppShell({ children }: Props) {
 
           <div className="flex items-center gap-3">
             <div className="hidden text-xs text-zinc-500 sm:block">
-              <span className="hidden md:inline">Wallet </span>Connection
             </div>
             <ConnectButton
               showBalance={false}
