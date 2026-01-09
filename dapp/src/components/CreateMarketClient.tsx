@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useAccount } from "wagmi";
+import { useState, useEffect } from "react";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ interface MarketCreationInput {
 
 export default function CreateMarketClient() {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
   const [formData, setFormData] = useState<MarketCreationInput>({
     title: "",
     description: "",
@@ -36,6 +37,13 @@ export default function CreateMarketClient() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdMarket, setCreatedMarket] = useState<any>(null);
+  const [preparedData, setPreparedData] = useState<any>(null);
+
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  const { writeContractAsync, isPending: isWriting } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
 
   // Check if user is authorized
   const { data: isAuthorized, isLoading: checkingAuth } = useQuery({
@@ -113,6 +121,19 @@ export default function CreateMarketClient() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const MARKET_FACTORY_ABI = [
+    {
+      type: "function",
+      name: "createMarket",
+      stateMutability: "nonpayable",
+      inputs: [
+        { name: "metadataHash", type: "bytes32" },
+        { name: "endTime", type: "uint256" },
+      ],
+      outputs: [{ name: "market", type: "address" }],
+    },
+  ] as const;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -126,12 +147,15 @@ export default function CreateMarketClient() {
 
     setIsSubmitting(true);
     setCreatedMarket(null);
+    setPreparedData(null);
+    setTxHash(undefined);
+    setErrors({});
 
     try {
-      // Convert endTime to Unix timestamp
+      // Step 1: Prepare market (validate, upload to IPFS)
       const endTime = Math.floor(new Date(formData.endTime).getTime() / 1000);
 
-      const response = await fetch("/api/markets/create", {
+      const prepareResponse = await fetch("/api/markets/prepare", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -147,29 +171,94 @@ export default function CreateMarketClient() {
         }),
       });
 
-      const data = await response.json();
+      const prepareData = await prepareResponse.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create market");
+      if (!prepareResponse.ok) {
+        throw new Error(prepareData.error || "Failed to prepare market");
       }
 
-      setCreatedMarket(data.market);
-      
-      // Reset form
-      setFormData({
-        title: "",
-        description: "",
-        category: "",
-        resolutionSource: "",
-        resolutionRules: [""],
-        endTime: "",
+      setPreparedData(prepareData);
+
+      // Step 2: User signs transaction to create market on-chain
+      const marketFactoryAddress = process.env.NEXT_PUBLIC_MARKET_FACTORY_ADDRESS as `0x${string}`;
+      if (!marketFactoryAddress) {
+        throw new Error("Market factory address not configured");
+      }
+
+      // Convert metadataHash from hex string to bytes32
+      const metadataHash = prepareData.metadataHash as `0x${string}`;
+
+      const hash = await writeContractAsync({
+        address: marketFactoryAddress,
+        abi: MARKET_FACTORY_ABI,
+        functionName: "createMarket",
+        args: [metadataHash, BigInt(endTime)],
       });
+
+      setTxHash(hash);
+      // Step 3: Wait for transaction confirmation
+      // The useWaitForTransactionReceipt hook will handle this
+      // We'll register the market after confirmation in useEffect
     } catch (error: any) {
-      setErrors({ submit: error.message });
-    } finally {
+      console.error("Market creation error:", error);
+      setErrors({ submit: error.message || "Failed to create market" });
       setIsSubmitting(false);
     }
   };
+
+  // Register market after transaction confirms
+  useEffect(() => {
+    const registerMarket = async () => {
+      if (!isConfirmed || !txHash) return;
+      if (!preparedData || !address) return;
+
+      try {
+        const registerResponse = await fetch("/api/markets/register", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            creatorAddress: address,
+            txHash,
+            metadataHash: preparedData.metadataHash,
+            ipfsCid: preparedData.ipfsCid,
+            metadata: preparedData.metadata,
+            chainId,
+          }),
+        });
+
+        const registerData = await registerResponse.json();
+
+        if (!registerResponse.ok) {
+          throw new Error(registerData.error || "Failed to register market");
+        }
+
+        setCreatedMarket(registerData.market);
+        setIsSubmitting(false);
+
+        // Reset form
+        setFormData({
+          title: "",
+          description: "",
+          category: "",
+          resolutionSource: "",
+          resolutionRules: [""],
+          endTime: "",
+        });
+        setPreparedData(null);
+        setTxHash(undefined);
+      } catch (error: any) {
+        console.error("Market registration error:", error);
+        setErrors({ submit: error.message || "Market created but registration failed" });
+        setIsSubmitting(false);
+      }
+    };
+
+    if (isConfirmed && txHash && preparedData) {
+      registerMarket();
+    }
+  }, [isConfirmed, txHash, preparedData, address, chainId]);
 
   if (!isConnected) {
     return (
@@ -503,13 +592,17 @@ export default function CreateMarketClient() {
         <div className="flex gap-4">
           <Button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isWriting || isConfirming}
             className="flex-1"
           >
-            {isSubmitting ? (
+            {isSubmitting || isWriting || isConfirming ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating Market...
+                {isWriting
+                  ? "Sign Transaction..."
+                  : isConfirming
+                  ? "Confirming..."
+                  : "Preparing..."}
               </>
             ) : (
               "Create Market"

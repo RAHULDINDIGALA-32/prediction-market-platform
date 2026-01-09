@@ -2,12 +2,29 @@ import { prisma } from "@/lib/db";
 
 export type CreatorRole = "ADMIN" | "EDITOR";
 
+const ADMIN_ADDRESS = process.env.ADMIN_ADDRESS?.toLowerCase();
+
+/**
+ * Check if an address is the system admin (from env)
+ */
+export function isSystemAdmin(address: string | undefined | null): boolean {
+  if (!address || !ADMIN_ADDRESS) return false;
+  return address.toLowerCase() === ADMIN_ADDRESS;
+}
+
 /**
  * Check if an address is authorized to create markets
+ * (Either system admin or whitelisted creator)
  */
-export async function isAuthorizedCreator(address: string): Promise<boolean> {
+export async function isAuthorizedCreator(address: string | undefined | null): Promise<boolean> {
   if (!address) return false;
 
+  // System admin is always authorized
+  if (isSystemAdmin(address)) {
+    return true;
+  }
+
+  // Check whitelist
   const creator = await prisma.creator.findUnique({
     where: { address: address.toLowerCase() },
   });
@@ -17,10 +34,17 @@ export async function isAuthorizedCreator(address: string): Promise<boolean> {
 
 /**
  * Check if an address is an admin
+ * (Either system admin or has ADMIN role in whitelist)
  */
-export async function isAdmin(address: string): Promise<boolean> {
+export async function isAdmin(address: string | undefined | null): Promise<boolean> {
   if (!address) return false;
 
+  // System admin is always admin
+  if (isSystemAdmin(address)) {
+    return true;
+  }
+
+  // Check whitelist for ADMIN role
   const creator = await prisma.creator.findUnique({
     where: { address: address.toLowerCase() },
   });
@@ -29,7 +53,7 @@ export async function isAdmin(address: string): Promise<boolean> {
 }
 
 /**
- * Add a new creator
+ * Add a new creator to whitelist (admin only)
  */
 export async function addCreator(address: string, role: CreatorRole = "EDITOR") {
   return prisma.creator.upsert({
@@ -43,7 +67,7 @@ export async function addCreator(address: string, role: CreatorRole = "EDITOR") 
 }
 
 /**
- * Remove a creator
+ * Remove a creator from whitelist (admin only)
  */
 export async function removeCreator(address: string) {
   return prisma.creator.delete({
@@ -51,3 +75,11 @@ export async function removeCreator(address: string) {
   });
 }
 
+/**
+ * Get all whitelisted creators
+ */
+export async function getAllCreators() {
+  return prisma.creator.findMany({
+    orderBy: { createdAt: "desc" },
+  });
+}
