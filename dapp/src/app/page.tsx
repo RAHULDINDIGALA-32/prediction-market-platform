@@ -25,11 +25,11 @@ export default async function Home() {
     <NavBar>
       <section className="mb-8 space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">
-          Prediction Markets
-        </h1>
-        <p className="max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+            Prediction Markets
+          </h1>
+          <p className="max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
           Discover and trade on binary prediction markets. View probabilities, volume, and time remaining at a glance.
-        </p>
+          </p>
       </section>
 
       <MarketsListClient initialMarkets={markets} />

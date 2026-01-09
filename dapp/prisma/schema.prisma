@@ -19,9 +19,29 @@ model Market {
   version         Int
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+  
+  // Market metadata fields
+  metadataHash    String?       @unique
+  ipfsCid         String?
+  title           String?
+  description     String?
+  category        String?
+  resolutionSource String?
+  endTime         BigInt?       // Unix timestamp from contract
+  
   signedQuotes    SignedQuote[]
   trades          Trade[]
   traderNonces    TraderNonce[]
+}
+
+model Creator {
+  id        String   @id @default(uuid())
+  address  String   @unique
+  role      CreatorRole @default(EDITOR)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([address])
 }
 
 model TraderNonce {
@@ -86,4 +106,9 @@ enum SignedQuoteStatus {
   PENDING
   COMMITTED
   CANCELLED
+}
+
+enum CreatorRole {
+  ADMIN
+  EDITOR
 }

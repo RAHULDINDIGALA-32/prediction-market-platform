@@ -29,6 +29,7 @@
     "decimal.js": "^10.4.3",
     "ethers": "^6.9.0",
     "framer-motion": "^12.25.0",
+    "ipfs-http-client": "^60.0.1",
     "lucide-react": "^0.562.0",
     "next": "16.1.1",
     "react": "19.2.3",

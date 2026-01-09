@@ -17,6 +17,11 @@ interface Market {
   collateral: any;
   contractAddress?: string | null;
   createdAt: Date;
+  title?: string | null;
+  description?: string | null;
+  category?: string | null;
+  ipfsCid?: string | null;
+  endTime?: bigint | null;
 }
 
 interface Props {

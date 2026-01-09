@@ -55,6 +55,13 @@ interface Market {
   collateral: any;
   contractAddress?: string | null;
   createdAt: Date;
+  title?: string | null;
+  description?: string | null;
+  category?: string | null;
+  resolutionSource?: string | null;
+  ipfsCid?: string | null;
+  metadataHash?: string | null;
+  endTime?: bigint | null;
   trades: Array<{
     id: string;
     side: string;
@@ -190,11 +197,16 @@ export default function MarketDetailClient({ market }: Props) {
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <CardTitle className="text-2xl mb-2">
-                Market #{market.id.slice(0, 8)}
+                {market.title || `Market #${market.id.slice(0, 8)}`}
               </CardTitle>
               <CardDescription>
-                Binary prediction market settled via optimistic oracle
+                {market.description || "Binary prediction market settled via optimistic oracle"}
               </CardDescription>
+              {market.category && (
+                <Badge variant="outline" className="mt-2">
+                  {market.category}
+                </Badge>
+              )}
             </div>
             <Badge variant={market.status === "OPEN" ? "success" : "secondary"}>
               {market.status}

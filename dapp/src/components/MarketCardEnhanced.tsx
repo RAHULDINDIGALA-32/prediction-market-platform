@@ -20,6 +20,10 @@ interface Market {
   contractAddress?: string;
   createdAt: Date;
   endTime?: Date | number;
+  title?: string | null;
+  description?: string | null;
+  category?: string | null;
+  ipfsCid?: string | null;
 }
 
 interface Props {
@@ -49,11 +53,16 @@ export default function MarketCardEnhanced({ market }: Props) {
             <div className="flex items-start justify-between gap-4 mb-4">
               <div className="flex-1 min-w-0">
                 <h3 className="text-lg font-semibold mb-2 line-clamp-2">
-                  Market #{market.id.slice(0, 8)}
+                  {market.title || `Market #${market.id.slice(0, 8)}`}
                 </h3>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
-                  Binary prediction market with YES/NO outcomes
+                <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3 line-clamp-2">
+                  {market.description || "Binary prediction market with YES/NO outcomes"}
                 </p>
+                {market.category && (
+                  <Badge variant="outline" className="text-xs">
+                    {market.category}
+                  </Badge>
+                )}
               </div>
               <Badge variant={statusInfo.variant}>
                 {statusInfo.label}
