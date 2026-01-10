@@ -9,11 +9,11 @@ pragma solidity ^0.8.27;
  */
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {TradeQuote, Outcome} from "./MarketTypes.sol";
 
-contract QuoteVerifier is EIP712, Ownable2Step {
+contract QuoteVerifier is EIP712, Ownable {
     using ECDSA for bytes32;
 
     //////////////////////////
@@ -50,11 +50,10 @@ contract QuoteVerifier is EIP712, Ownable2Step {
      * @notice Initialize the QuoteVerifier contract
      * @param initialOwner Address that will own the contract
      */
-    constructor(address initialOwner) EIP712("PredictionMarket-QuoteVerifier", "1") {
+    constructor(address initialOwner) EIP712("PredictionMarket-QuoteVerifier", "1") Ownable(initialOwner) {
         if (initialOwner == address(0)) {
             revert QuoteVerifier__InvalidAddress();
         }
-        _transferOwnership(initialOwner);
     }
 
     //////////////////////////

@@ -8,13 +8,13 @@ pragma solidity ^0.8.27;
  * @dev Implements optimistic oracle pattern with dispute resolution and bond-based security
  */
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import {Outcome, MarketState} from "./MarketTypes.sol";
 import {Market} from "./Market.sol";
 
-contract OracleAdapter is ReentrancyGuard, Ownable2Step, Pausable {
+contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
     //////////////////////////
     /// TYPE DECLARATIONS //////
     //////////////////////////
@@ -42,23 +42,10 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step, Pausable {
     //////////////////////////
     /// EVENTS //////
     //////////////////////////
-    event OutcomeProposed(
-        address indexed market,
-        Outcome indexed outcome,
-        address indexed proposer,
-        uint256 timestamp
-    );
-    event OutcomeDisputed(
-        address indexed market,
-        address indexed disputer,
-        uint256 indexed timestamp
-    );
+    event OutcomeProposed(address indexed market, Outcome indexed outcome, address indexed proposer, uint256 timestamp);
+    event OutcomeDisputed(address indexed market, address indexed disputer, uint256 indexed timestamp);
     event OutcomeFinalized(address indexed market, Outcome indexed finalOutcome);
-    event BondRedistributed(
-        address indexed market,
-        address indexed winner,
-        uint256 indexed amount
-    );
+    event BondRedistributed(address indexed market, address indexed winner, uint256 indexed amount);
 
     //////////////////////////
     /// ERRORS //////
@@ -118,7 +105,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step, Pausable {
         uint256 _resolutionDeadline,
         address _settlementEngine,
         address _owner
-    ) {
+    ) Ownable(_owner) {
         if (_settlementEngine == address(0) || _owner == address(0)) {
             revert OracleAdapter__InvalidAddress();
         }
@@ -127,8 +114,6 @@ contract OracleAdapter is ReentrancyGuard, Ownable2Step, Pausable {
         i_disputerBond = _disputerBond;
         i_resolutionDeadline = _resolutionDeadline;
         i_settlementEngine = _settlementEngine;
-
-        _transferOwnership(_owner);
     }
 
     //////////////////////////
