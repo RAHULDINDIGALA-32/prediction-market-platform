@@ -197,8 +197,6 @@ export default function CreateMarketClient() {
 
       setTxHash(hash);
       // Step 3: Wait for transaction confirmation
-      // The useWaitForTransactionReceipt hook will handle this
-      // We'll register the market after confirmation in useEffect
     } catch (error: any) {
       console.error("Market creation error:", error);
       setErrors({ submit: error.message || "Failed to create market" });
@@ -271,10 +269,9 @@ export default function CreateMarketClient() {
         </div>
         <Card>
           <CardContent className="p-12 text-center">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">
+            <p className="text-md text-zinc-500 dark:text-zinc-400 mb-4">
               Connect wallet to continue
             </p>
-            <ConnectButton />
           </CardContent>
         </Card>
       </div>
@@ -536,7 +533,7 @@ export default function CreateMarketClient() {
                 <span className="text-xs text-red-500 mt-1 block">{errors.endTime}</span>
               )}
               {endTimeDate && (
-                <p className="text-xs text-zinc-500 mt-1">
+                <p className="text-xs text-zinc-300 mt-1">
                   Trading stops at: {endTimeDate.toLocaleString("en-US", { timeZone: "UTC" })} UTC
                 </p>
               )}

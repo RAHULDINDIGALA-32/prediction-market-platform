@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
 import { isAdmin, addCreator, removeCreator, getAllCreators } from "@/lib/permissions";
 
 /**

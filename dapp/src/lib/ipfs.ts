@@ -1,19 +1,9 @@
-import { create } from "ipfs-http-client";
-
 // Pinata IPFS configuration
 const PINATA_API_KEY = process.env.PINATA_API_KEY;
 const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY;
 const PINATA_GATEWAY = process.env.PINATA_GATEWAY || "https://gateway.pinata.cloud/ipfs/";
 
-// Initialize IPFS client (using Pinata's public gateway for reads)
-const ipfsClient = create({
-  url: "https://ipfs.infura.io:5001/api/v0",
-  headers: {
-    authorization: PINATA_API_KEY && PINATA_SECRET_KEY
-      ? `Basic ${Buffer.from(`${PINATA_API_KEY}:${PINATA_SECRET_KEY}`).toString("base64")}`
-      : undefined,
-  },
-});
+
 
 export interface MarketMetadata {
   title: string;

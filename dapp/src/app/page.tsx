@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/db";
-import MarketCardEnhanced from "@/components/MarketCardEnhanced";
 import NavBar from "@/components/NavBar";
 import MarketsListClient from "@/components/MarketsListClient";
 
