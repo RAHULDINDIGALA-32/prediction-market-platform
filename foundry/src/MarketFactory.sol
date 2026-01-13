@@ -192,7 +192,6 @@ contract MarketFactory {
         // Deploy market
         market = address(
             new Market(
-                address(this),
                 address(i_vault),
                 address(i_quoteVerifier),
                 address(i_settlementEngine),

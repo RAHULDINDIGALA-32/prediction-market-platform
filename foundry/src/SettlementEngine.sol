@@ -25,7 +25,6 @@ contract SettlementEngine is ReentrancyGuard {
     MarketFactory public immutable i_factory;
     uint256 public constant REDEMPTION_PERIOD = 30 days;
 
-    //mapping(address market => bool isSettled) public marketSettled;
     mapping(address market => bool isRedemptionclosed) public redemptionClosed;
     mapping(address market => uint256 resolvedAt) public marketResolvedAt;
     mapping(address market => mapping(address user => uint256 redeemedAmount)) public redeemed;

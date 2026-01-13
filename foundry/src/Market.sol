@@ -8,14 +8,13 @@ pragma solidity ^0.8.27;
  * @dev This contract handles the lifecycle of a prediction market from creation to settlement
  */
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import {OutcomeToken} from "./OutcomeToken.sol";
 import {MarketState, Outcome, TradeQuote} from "./MarketTypes.sol";
 import {Vault} from "./Vault.sol";
 import {QuoteVerifier} from "./QuoteVerifier.sol";
 
-contract Market is ReentrancyGuard, Pausable {
+contract Market is ReentrancyGuard {
     //////////////////////////
     /// STATE VARIABLES //////
     //////////////////////////
@@ -26,7 +25,6 @@ contract Market is ReentrancyGuard, Pausable {
     OutcomeToken public immutable i_yesToken;
     OutcomeToken public immutable i_noToken;
 
-    address public immutable i_factory;
     address public immutable i_settlementEngine;
 
     MarketState public state;
@@ -67,14 +65,7 @@ contract Market is ReentrancyGuard, Pausable {
     //////////////////////////
     /// MODIFIERS //////
     //////////////////////////
-    modifier onlyFactory() {
-        if (msg.sender != i_factory) {
-            revert Market__Unauthorized();
-        }
-        _;
-    }
-
-    modifier onlySettlementEngine() {
+      modifier onlySettlementEngine() {
         if (msg.sender != i_settlementEngine) {
             revert Market__Unauthorized();
         }
@@ -110,20 +101,18 @@ contract Market is ReentrancyGuard, Pausable {
      * @param _lmsrB LMSR liquidity parameter (b value)
      */
     constructor(
-        address _factory,
         address _vault,
         address _quoteVerifier,
         address _settlementEngine,
         uint256 _endTime,
         uint256 _lmsrB
     ) {
-        if (_factory == address(0) || _vault == address(0) || _quoteVerifier == address(0) || _settlementEngine == address(0)) {
+        if (_vault == address(0) || _quoteVerifier == address(0) || _settlementEngine == address(0)) {
             revert Market__InvalidAddress();
         }
         if (_lmsrB == 0) {
             revert Market__InvalidAddress(); // Using same error for clarity
         }
-        i_factory = _factory;
         i_settlementEngine = _settlementEngine;
         i_vault = Vault(_vault);
         i_quoteVerifier = QuoteVerifier(_quoteVerifier);
@@ -153,7 +142,6 @@ contract Market is ReentrancyGuard, Pausable {
         external
         payable
         nonReentrant
-        whenNotPaused
         onlyOpen
         notExpired
     {
@@ -270,22 +258,6 @@ contract Market is ReentrancyGuard, Pausable {
     } 
 
     
-
-    /**
-     * @notice Pause the market, preventing new trades
-     * @dev Only callable by the factory owner
-     */
-    function pause() external onlyFactory {
-        _pause();
-    }
-
-    /**
-     * @notice Unpause the market, allowing trades to resume
-     * @dev Only callable by the factory owner
-     */
-    function unpause() external onlyFactory {
-        _unpause();
-    }
 
     //////////////////////////
     /// Internal Functions ///

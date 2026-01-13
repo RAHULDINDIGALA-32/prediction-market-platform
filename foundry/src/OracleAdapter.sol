@@ -9,14 +9,12 @@ pragma solidity ^0.8.27;
  */
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
-
 import {Outcome, MarketState} from "./MarketTypes.sol";
 import {Market} from "./Market.sol";
 import {OracleBudget} from "./OracleBudget.sol";
 import {PlatformTreasury} from "./PlatformTreasury.sol";
 
-contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
+contract OracleAdapter is ReentrancyGuard, Ownable {
     //////////////////////////
     /// TYPE DECLARATIONS //////
     //////////////////////////
@@ -151,22 +149,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
         resolvers[resolver] = allowed;
     }
 
-    /**
-     * @notice Pause oracle operations
-     * @dev Prevents new proposals, disputes, and resolutions
-     */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-     * @notice Unpause oracle operations
-     * @dev Resumes normal oracle functionality
-     */
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
+   
     /**
      * @notice Propose an outcome for a market
      * @dev Optimistically assumed correct unless disputed. Requires proposer bond.
@@ -176,7 +159,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
      * @custom:reverts OracleAdapter__OutcomeAlreadyProposed If outcome already proposed
      * @custom:reverts OracleAdapter__InvalidETHAmount If sent ETH doesn't match proposer bond
      */
-    function proposeOutcome(address market, Outcome outcome) external payable nonReentrant whenNotPaused {
+    function proposeOutcome(address market, Outcome outcome) external payable nonReentrant {
         Market marketContract = Market(market);
         // Allow proposals if market is closed OR expired (even if not explicitly closed)
         if (!marketContract.isClosedOrExpired()) {
@@ -213,7 +196,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
      * @custom:reverts OracleAdapter__DisputeWindowClosed If dispute window has passed
      * @custom:reverts OracleAdapter__InvalidETHAmount If sent ETH doesn't match disputer bond
      */
-    function disputeOutcome(address market) external payable nonReentrant whenNotPaused {
+    function disputeOutcome(address market) external payable nonReentrant {
         OracleRequest storage request = requests[market];
 
         if (request.proposedAt == 0) {
@@ -251,7 +234,6 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
         external
         nonReentrant
         onlyResolvers
-        whenNotPaused
     {
         OracleRequest storage request = requests[market];
         if (!request.disputed) {
@@ -346,7 +328,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
      * @custom:reverts OracleAdapter__Disputed If outcome was disputed
      * @custom:reverts OracleAdapter__DisputeWindowNotClosed If dispute window hasn't closed
      */
-    function finalize(address market) external nonReentrant onlySettlementEngine whenNotPaused {
+    function finalize(address market) external nonReentrant onlySettlementEngine {
         OracleRequest storage request = requests[market];
         if (request.proposedAt == 0) {
             revert OracleAdapter__OutcomeNotProposed();
