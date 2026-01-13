@@ -29,19 +29,41 @@ model Market {
   resolutionSource String?
   endTime         BigInt?       // Unix timestamp from contract
   
+  // Creator and subsidy tracking
+  creator         String?
+  subsidyAmount   Decimal?      // Creator's LMSR subsidy deposit (b * ln(2))
+  
   signedQuotes    SignedQuote[]
   trades          Trade[]
   traderNonces    TraderNonce[]
+  oracleEvents    OracleEvent[]
 }
 
 model Creator {
-  id        String   @id @default(uuid())
-  address  String   @unique
-  role      CreatorRole @default(EDITOR)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  address      String   @unique
+  role         CreatorRole @default(EDITOR)
+  isWhitelisted Boolean  @default(false)  // Only whitelisted creators can create markets
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([address])
+}
+
+model OracleEvent {
+  id           String      @id @default(uuid())
+  marketId     String
+  market       Market      @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  proposer     String
+  disputer     String?
+  proposed     Outcome
+  finalized    Outcome?
+  disputedAt   DateTime?
+  finalizedAt  DateTime    @default(now())
+  createdAt    DateTime    @default(now())
+
+  @@index([marketId])
+  @@index([proposer])
 }
 
 model TraderNonce {
@@ -98,6 +120,11 @@ enum MarketStatus {
 }
 
 enum TradeSide {
+  YES
+  NO
+}
+
+enum Outcome {
   YES
   NO
 }

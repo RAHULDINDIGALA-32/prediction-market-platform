@@ -31,6 +31,7 @@ contract Market is ReentrancyGuard, Pausable {
 
     MarketState public state;
     uint256 public immutable i_endTime;
+    uint256 public immutable i_lmsrB; // LMSR liquidity parameter for pricing
 
     mapping(bytes32 quoteHash => bool isUsed) public usedQuoteHashes;
 
@@ -104,16 +105,28 @@ contract Market is ReentrancyGuard, Pausable {
      * @param _quoteVerifier Address of the QuoteVerifier contract
      * @param _settlementEngine Address of the SettlementEngine contract
      * @param _endTime Unix timestamp when the market expires
+     * @param _lmsrB LMSR liquidity parameter (b value)
      */
-    constructor(address _factory, address _vault, address _quoteVerifier, address _settlementEngine, uint256 _endTime) {
+    constructor(
+        address _factory,
+        address _vault,
+        address _quoteVerifier,
+        address _settlementEngine,
+        uint256 _endTime,
+        uint256 _lmsrB
+    ) {
         if (_factory == address(0) || _vault == address(0) || _quoteVerifier == address(0) || _settlementEngine == address(0)) {
             revert Market__InvalidAddress();
+        }
+        if (_lmsrB == 0) {
+            revert Market__InvalidAddress(); // Using same error for clarity
         }
         i_factory = _factory;
         i_settlementEngine = _settlementEngine;
         i_vault = Vault(_vault);
         i_quoteVerifier = QuoteVerifier(_quoteVerifier);
         i_endTime = _endTime;
+        i_lmsrB = _lmsrB;
 
         i_yesToken = new OutcomeToken("Yes Token", "YES", address(this), _settlementEngine);
         i_noToken = new OutcomeToken("No Token", "NO", address(this), _settlementEngine);
@@ -305,6 +318,7 @@ contract Market is ReentrancyGuard, Pausable {
      * @return yesToken_ Address of the YES outcome token
      * @return noToken_ Address of the NO outcome token
      * @return vault_ Address of the vault holding market ETH
+     * @return lmsrB_ LMSR parameter b
      * @return isExpired_ Whether the market has expired
      * @return isClosed_ Whether the market is closed
      */
@@ -317,6 +331,7 @@ contract Market is ReentrancyGuard, Pausable {
             address yesToken_,
             address noToken_,
             address vault_,
+            uint256 lmsrB_,
             bool isExpired_,
             bool isClosed_
         )
@@ -327,6 +342,7 @@ contract Market is ReentrancyGuard, Pausable {
             address(i_yesToken),
             address(i_noToken),
             address(i_vault),
+            i_lmsrB,
             block.timestamp >= i_endTime,
             state == MarketState.CLOSED
         );
