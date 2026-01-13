@@ -13,6 +13,8 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import {Outcome, MarketState} from "./MarketTypes.sol";
 import {Market} from "./Market.sol";
+import {OracleBudget} from "./OracleBudget.sol";
+import {PlatformTreasury} from "./PlatformTreasury.sol";
 
 contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
     //////////////////////////
@@ -39,7 +41,8 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
     uint256 public immutable i_proposerBond;
     uint256 public immutable i_resolutionDeadline;
     address public immutable i_settlementEngine;
-    address public i_platformFeeRecipient;
+    OracleBudget public immutable i_oracleBudget;
+    PlatformTreasury public immutable i_platformTreasury;
 
     mapping(address market => OracleRequest proposalRequest) public requests;
     mapping(address user => bool isResolver) public resolvers;
@@ -104,7 +107,8 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
      * @param _disputerBond Required bond amount for disputing outcomes (e.g., 0.02 ETH)
      * @param _resolutionDeadline Maximum time (in seconds) for resolvers to resolve disputes
      * @param _settlementEngine Address of the SettlementEngine contract
-     * @param _platformFeeRecipient Address that receives platform fees
+     * @param _oracleBudget Address of the OracleBudget contract (bounty fund)
+     * @param _platformTreasury Address of the PlatformTreasury contract (fee recipient)
      * @param _owner Address that will own the contract
      */
     constructor(
@@ -113,10 +117,11 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
         uint256 _disputerBond,
         uint256 _resolutionDeadline,
         address _settlementEngine,
-        address _platformFeeRecipient,
+        address _oracleBudget,
+        address _platformTreasury,
         address _owner
     ) Ownable(_owner) {
-        if (_settlementEngine == address(0) || _platformFeeRecipient == address(0) || _owner == address(0)) {
+        if (_settlementEngine == address(0) || _oracleBudget == address(0) || _platformTreasury == address(0) || _owner == address(0)) {
             revert OracleAdapter__InvalidAddress();
         }
 
@@ -125,7 +130,8 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
         i_disputerBond = _disputerBond;
         i_resolutionDeadline = _resolutionDeadline;
         i_settlementEngine = _settlementEngine;
-        i_platformFeeRecipient = _platformFeeRecipient;
+        i_oracleBudget = OracleBudget(_oracleBudget);
+        i_platformTreasury = PlatformTreasury(_platformTreasury);
     }
 
     //////////////////////////
@@ -276,7 +282,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
             // Proposer gets: bond back + bounty + (1 - fee) * disputer bond
             uint256 resolutionFee = (loserBond * RESOLUTION_FEE_PERCENTAGE) / 10000;
             uint256 winnerShare = loserBond - resolutionFee;
-            uint256 proposerTotal = i_proposerBond + PROPOSER_BOUNTY + winnerShare;
+            uint256 proposerTotal = i_proposerBond + winnerShare;
             uint256 resolverShare = (resolutionFee * RESOLVER_BOUNTY_PERCENTAGE) / 10000;
             uint256 platformFee = resolutionFee - resolverShare;
             
@@ -285,15 +291,15 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
                 revert OracleAdapter__ETHTransferFailed();
             }
 
+            // Pull bounty from OracleBudget (disputed but proposer was correct)
+            i_oracleBudget.payBounty(market, request.proposer, PROPOSER_BOUNTY);
+
             (bool resolverSuccess,) = msg.sender.call{value: resolverShare}("");
             if (!resolverSuccess) {
                 revert OracleAdapter__ETHTransferFailed();
             }
             
-            (bool platformSuccess,) = i_platformFeeRecipient.call{value: platformFee}("");
-            if (!platformFeesSuccess) {
-                revert OracleAdapter__ETHTransferFailed();
-            }
+            i_platformTreasury.depositDisputeFee{value: platformFee}(market);
             
             emit BondRedistributed(market, winner, proposerTotal);
             emit PlatformFeePaid(platformFee);
@@ -319,10 +325,10 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
                 revert OracleAdapter__ETHTransferFailed();
             }
             
-            (bool platformSuccess,) = i_platformFeeRecipient.call{value: platformFee + PROPOSER_BOUNTY}("");
-            if (!platformSuccess) {
-                revert OracleAdapter__ETHTransferFailed();
-            }
+            i_platformTreasury.depositDisputeFee{value: platformFee}(market);
+            // Pull bounty from OracleBudget (disputed but disputer was correct)
+            i_oracleBudget.payBounty(market, address(i_platformTreasury), PROPOSER_BOUNTY);
+
             
             emit BondRedistributed(market, winner, disputerTotal);
             emit PlatformFeePaid(platformFee);
@@ -333,7 +339,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
 
     /**
      * @notice Finalize an undisputed outcome after dispute window closes
-     * @dev Only callable by SettlementEngine. Returns proposer bond + fixed proposer bounty.
+     * @dev Only callable by SettlementEngine. Pulls bounty from OracleBudget.
      *      Fixed bounty incentivizes fast, truthful oracle proposals.
      * @param market The market to finalize
      * @custom:reverts OracleAdapter__OutcomeNotProposed If no outcome proposed
@@ -357,13 +363,14 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
 
         request.finalized = true;
 
-        // Return proposer bond + fixed proposer bounty reward
-        uint256 totalReward = i_proposerBond + PROPOSER_BOUNTY;
-
-        (bool success,) = (request.proposer).call{value: totalReward}("");
-        if (!success) {
+        // Return proposer bond + pay fixed bounty from OracleBudget
+        (bool bondSuccess,) = (request.proposer).call{value: i_proposerBond}("");
+        if (!bondSuccess) {
             revert OracleAdapter__ETHTransferFailed();
         }
+
+        // Pull bounty from OracleBudget (undisputed case)
+        i_oracleBudget.payBounty(market, request.proposer, PROPOSER_BOUNTY);
 
         emit BountyPaid(market, request.proposer, PROPOSER_BOUNTY);
         emit OutcomeFinalized(market, request.proposedOutcome);

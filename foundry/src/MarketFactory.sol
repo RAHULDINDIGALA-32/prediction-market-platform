@@ -10,6 +10,8 @@ pragma solidity ^0.8.27;
 import {Market} from "./Market.sol";
 import {Vault} from "./Vault.sol";
 import {OracleAdapter} from "./OracleAdapter.sol";
+import {OracleBudget} from "./OracleBudget.sol";
+import {PlatformTreasury} from "./PlatformTreasury.sol";
 import {QuoteVerifier} from "./QuoteVerifier.sol";
 import {SettlementEngine} from "./SettlementEngine.sol";
 
@@ -22,6 +24,8 @@ contract MarketFactory {
 
     Vault public immutable i_vault;
     OracleAdapter public immutable i_oracle;
+    OracleBudget public immutable i_oracleBudget;
+    PlatformTreasury public immutable i_platformTreasury;
     QuoteVerifier public immutable i_quoteVerifier;
     SettlementEngine public immutable i_settlementEngine;
     address public i_owner;
@@ -32,9 +36,6 @@ contract MarketFactory {
     // Track creator deposits (subsidy tracking)
     mapping(address market => address creator) public marketCreator;
     mapping(address market => uint256 subsidy) public marketSubsidy;
-    
-    // Accumulated platform fees for oracle operations
-    uint256 public accumulatedFees;
 
     mapping(address market => bytes32 mateHash) public marketToMetadataHash;
 
@@ -53,7 +54,6 @@ contract MarketFactory {
         uint256 subsidy
     );
     event CreatorWhitelisted(address indexed creator, bool isWhitelisted);
-    event FeesWithdrawn(address indexed owner, uint256 amount);
 
     //////////////////////////
     /// ERRORS ///
@@ -80,21 +80,41 @@ contract MarketFactory {
     //////////////////////////
     /// FUNCTIONS ///
     //////////////////////////
-    
+
     /**
      * @notice Initialize the MarketFactory contract
      * @param _vault Address of the Vault contract
      * @param _oracle Address of the OracleAdapter contract
+     * @param _oracleBudget Address of the OracleBudget contract
+     * @param _platformTreasury Address of the PlatformTreasury contract
      * @param _quoteVerifier Address of the QuoteVerifier contract
      * @param _settlementEngine Address of the SettlementEngine contract
      * @param _owner Address that will own the contract
      */
-    constructor(address _vault, address _oracle, address _quoteVerifier, address _settlementEngine, address _owner) {
-        if (_vault == address(0) || _oracle == address(0) || _quoteVerifier == address(0) || _settlementEngine == address(0) || _owner == address(0)) {
+    constructor(
+        address _vault,
+        address _oracle,
+        address _oracleBudget,
+        address _platformTreasury,
+        address _quoteVerifier,
+        address _settlementEngine,
+        address _owner
+    ) {
+        if (
+            _vault == address(0)
+            || _oracle == address(0)
+            || _oracleBudget == address(0)
+            || _platformTreasury == address(0)
+            || _quoteVerifier == address(0)
+            || _settlementEngine == address(0)
+            || _owner == address(0)
+        ) {
             revert MarketFactory__InvalidAddress();
         }
         i_vault = Vault(_vault);
         i_oracle = OracleAdapter(_oracle);
+        i_oracleBudget = OracleBudget(_oracleBudget);
+        i_platformTreasury = PlatformTreasury(_platformTreasury);
         i_quoteVerifier = QuoteVerifier(_quoteVerifier);
         i_settlementEngine = SettlementEngine(_settlementEngine);
         i_owner = _owner;
@@ -118,24 +138,10 @@ contract MarketFactory {
     }
 
     /**
-     * @notice Withdraw accumulated platform fees
-     * @dev Only owner can withdraw. Funds come from oracle bond redistributions.
-     */
-    function withdrawFees() external onlyOwner {
-        uint256 amount = accumulatedFees;
-        if (amount == 0) {
-            revert MarketFactory__InsufficientFee();
-        }
-        accumulatedFees = 0;
-        (bool success,) = i_owner.call{value: amount}("");
-        require(success, "Fee withdrawal failed");
-        emit FeesWithdrawn(i_owner, amount);
-    }
-
-    /**
      * @notice Create a new prediction market with subsidy
-     * @dev Creator must be whitelisted. Requires creation fee and subsidy deposit.
+     * @dev Creator must be whitelisted. Requires creation fee (0.03 ETH) and subsidy deposit.
      *      Subsidy = b * ln(2) ensures LMSR solvency.
+     *      Fee split: 0.02 ETH -> OracleBudget, 0.01 ETH -> PlatformTreasury
      * @param metadataHash Hash of the market metadata (used to prevent duplicates)
      * @param endTime Unix timestamp when the market expires
      * @param lmsrB LMSR liquidity parameter (b value)
@@ -210,8 +216,12 @@ contract MarketFactory {
         // Deposit subsidy into vault for market
         i_vault.deposit{value: subsidyAmount}(market);
 
-        // Accumulate creation fee for oracle operations
-        accumulatedFees += MARKET_CREATION_FEE;
+        // Route creation fee: 0.02 ETH -> OracleBudget, 0.01 ETH -> PlatformTreasury
+        uint256 oracleBounty = 0.02 ether;
+        uint256 platformFee = 0.01 ether;
+
+        i_oracleBudget.fundMarketBounty{value: oracleBounty}(market, oracleBounty);
+        i_platformTreasury.depositCreationFee{value: platformFee}(market);
 
         // Refund any excess ETH
         if (msg.value > totalRequired) {
@@ -219,7 +229,6 @@ contract MarketFactory {
             require(success, "Refund failed");
         }
 
-        
         emit MarketCreated(market, metadataHash, endTime, msg.sender, subsidyAmount);
     }
        

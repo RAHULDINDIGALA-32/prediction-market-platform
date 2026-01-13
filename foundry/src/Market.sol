@@ -47,12 +47,14 @@ contract Market is ReentrancyGuard, Pausable {
     );
 
     event MarketClosed(uint256 indexed timestamp);
-    event MarketSettled(Outcome indexed outcome);
+    event MarketResolve(Outcome indexed outcome);
+    event MarketSettled(uint256 indexed timestamp);
 
     //////////////////////////
     /// ERRORS //////
     //////////////////////////
     error Market__MarketNotOpen();
+    error Market__MarketNotResolved();
     error Market__InvalidETHAmount();
     error Market__MarketExpired();
     error Market__MarketNotExpired();
@@ -72,8 +74,8 @@ contract Market is ReentrancyGuard, Pausable {
         _;
     }
 
-    modifier onlySettlementEngineOrFactory() {
-        if (msg.sender != i_settlementEngine && msg.sender != i_factory) {
+    modifier onlySettlementEngine() {
+        if (msg.sender != i_settlementEngine) {
             revert Market__Unauthorized();
         }
         _;
@@ -237,19 +239,37 @@ contract Market is ReentrancyGuard, Pausable {
  
 
     /**
-     * @notice Settle the market with a final outcome
+     * @notice Resolve the market with a final outcome
      * @dev Can only be called by SettlementEngine or Factory. Auto-closes market if expired.
+     * Transitions market from CLOSED -> RESOLVED (oracle outcome finalized).
      * @param outcome The final outcome (YES or NO) for the market
      * @custom:reverts Market__MarketNotClosed If market is not closed or expired
      */
-    function settleMarket(Outcome outcome) external onlySettlementEngineOrFactory {
+    function resolveMarket(Outcome outcome) external onlySettlementEngine {
         _ensureClosedIfExpired();
         if (state != MarketState.CLOSED) {
             revert Market__MarketNotClosed();
         }
-        state = MarketState.SETTLED;
-        emit MarketSettled(outcome);
+
+        state = MarketState.RESOLVED;
+        emit MarketResolved(outcome);
     }
+
+    /**
+    * @notice Settle the market
+    * @dev Can only be called by SettlementEngine. Transitions market from RESOLVED -> SETTLED.
+    */
+    function settleMarket() external onlySettlementEngine() {
+
+        if (state != MarketState.RESOLVED) {
+            revert Market__MarketNotResolved();
+        }
+
+        state = MarketState.SETTLED;
+        emit MarketSettled(block.timestamp);
+    } 
+
+    
 
     /**
      * @notice Pause the market, preventing new trades
@@ -313,14 +333,14 @@ contract Market is ReentrancyGuard, Pausable {
 
     /**
      * @notice Get comprehensive market information
-     * @return state_ Current market state (OPEN, CLOSED, or SETTLED)
+     * @return state_ Current market state (OPEN, CLOSED, RESOLVED, or SETTLED)
      * @return endTime_ Unix timestamp when market expires
      * @return yesToken_ Address of the YES outcome token
      * @return noToken_ Address of the NO outcome token
      * @return vault_ Address of the vault holding market ETH
      * @return lmsrB_ LMSR parameter b
      * @return isExpired_ Whether the market has expired
-     * @return isClosed_ Whether the market is closed
+     * @return isClosed_ Whether the market is closed or expired
      */
     function getMarketInfo()
         external
@@ -344,7 +364,7 @@ contract Market is ReentrancyGuard, Pausable {
             address(i_vault),
             i_lmsrB,
             block.timestamp >= i_endTime,
-            state == MarketState.CLOSED
+            state == MarketState.CLOSED || block.timestamp >= i_endTime
         );
     }
 }
