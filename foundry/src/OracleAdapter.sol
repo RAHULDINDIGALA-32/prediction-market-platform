@@ -30,12 +30,14 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
     //////////////////////////
     /// STATE VARIABLES //////
     //////////////////////////
+    uint256 public constant PROPOSER_BOUNTY = 0.02 ether; 
+    uint256 public constant RESOLUTION_FEE_PERCENTAGE = 5000; // Dispute Resolution fee (% share in Loser Bond) (5000 = 50%)
+    uint256 public constant RESOLVER_BOUNTY_PERCENTAGE = 5000; // Resolver bounty (% share in Resolution Fee) (5000 = 50%)
+
     uint256 public immutable i_disputeWindow;
     uint256 public immutable i_disputerBond;
     uint256 public immutable i_proposerBond;
     uint256 public immutable i_resolutionDeadline;
-    uint256 public immutable i_fixedBounty;              // Fixed reward for fast oracle proposals
-    uint256 public immutable i_platformFeeBps;          // Platform fee in basis points (3000-5000 = 30-50%)
     address public immutable i_settlementEngine;
     address public i_platformFeeRecipient;
 
@@ -101,8 +103,6 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
      * @param _disputeWindow Time window (in seconds) during which outcomes can be disputed
      * @param _disputerBond Required bond amount for disputing outcomes (e.g., 0.02 ETH)
      * @param _resolutionDeadline Maximum time (in seconds) for resolvers to resolve disputes
-     * @param _fixedBounty Fixed reward for undisputed proposals (e.g., 0.02 ETH)
-     * @param _platformFeeBps Platform fee in basis points (e.g., 4000 = 40%)
      * @param _settlementEngine Address of the SettlementEngine contract
      * @param _platformFeeRecipient Address that receives platform fees
      * @param _owner Address that will own the contract
@@ -112,8 +112,6 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
         uint256 _disputeWindow,
         uint256 _disputerBond,
         uint256 _resolutionDeadline,
-        uint256 _fixedBounty,
-        uint256 _platformFeeBps,
         address _settlementEngine,
         address _platformFeeRecipient,
         address _owner
@@ -121,15 +119,11 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
         if (_settlementEngine == address(0) || _platformFeeRecipient == address(0) || _owner == address(0)) {
             revert OracleAdapter__InvalidAddress();
         }
-        if (_platformFeeBps > 10000) {
-            revert OracleAdapter__InvalidBasisPoints();
-        }
+
         i_proposerBond = _proposerBond;
         i_disputeWindow = _disputeWindow;
         i_disputerBond = _disputerBond;
         i_resolutionDeadline = _resolutionDeadline;
-        i_fixedBounty = _fixedBounty;
-        i_platformFeeBps = _platformFeeBps;
         i_settlementEngine = _settlementEngine;
         i_platformFeeRecipient = _platformFeeRecipient;
     }
@@ -238,7 +232,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
     /**
      * @notice Resolve a disputed outcome
      * @dev Callable by resolvers only. Distributes bonds with platform fee.
-     *      Platform fee = (1 - isProposerCorrect ? proposerBond : disputerBond) * platformFeeBps
+     *      Platform fee = (1 - isProposerCorrect ? proposerBond : disputerBond) * resolutionFeePercentage
      *      This ensures platform is paid from the loser's bond.
      * @param market The market outcome to resolve
      * @param finalOutcome The final resolved outcome (YES or NO)
@@ -280,17 +274,24 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
             loserBond = i_disputerBond;
             
             // Proposer gets: bond back + bounty + (1 - fee) * disputer bond
-            uint256 platformFee = (loserBond * i_platformFeeBps) / 10000;
-            uint256 winnerShare = loserBond - platformFee;
-            uint256 proposerTotal = i_proposerBond + i_fixedBounty + winnerShare;
+            uint256 resolutionFee = (loserBond * RESOLUTION_FEE_PERCENTAGE) / 10000;
+            uint256 winnerShare = loserBond - resolutionFee;
+            uint256 proposerTotal = i_proposerBond + PROPOSER_BOUNTY + winnerShare;
+            uint256 resolverShare = (resolutionFee * RESOLVER_BOUNTY_PERCENTAGE) / 10000;
+            uint256 platformFee = resolutionFee - resolverShare;
             
-            (bool success,) = winner.call{value: proposerTotal}("");
-            if (!success) {
+            (bool winnerSuccess,) = winner.call{value: proposerTotal}("");
+            if (!winnerSuccess) {
+                revert OracleAdapter__ETHTransferFailed();
+            }
+
+            (bool resolverSuccess,) = msg.sender.call{value: resolverShare}("");
+            if (!resolverSuccess) {
                 revert OracleAdapter__ETHTransferFailed();
             }
             
-            (bool feesSuccess,) = i_platformFeeRecipient.call{value: platformFee}("");
-            if (!feesSuccess) {
+            (bool platformSuccess,) = i_platformFeeRecipient.call{value: platformFee}("");
+            if (!platformFeesSuccess) {
                 revert OracleAdapter__ETHTransferFailed();
             }
             
@@ -302,17 +303,24 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
             loserBond = i_proposerBond;
             
             // Disputer gets: bond back + (1 - fee) * proposer bond
-            uint256 platformFee = (loserBond * i_platformFeeBps) / 10000;
-            uint256 winnerShare = loserBond - platformFee;
+            uint256 resolutionFee = (loserBond * RESOLUTION_FEE_PERCENTAGE) / 10000;
+            uint256 winnerShare = loserBond - resolutionFee;
             uint256 disputerTotal = i_disputerBond + winnerShare;
+            uint256 resolverShare = (resolutionFee * RESOLVER_BOUNTY_PERCENTAGE) / 10000;
+            uint256 platformFee = resolutionFee - resolverShare;
             
-            (bool success,) = winner.call{value: disputerTotal}("");
-            if (!success) {
+            (bool winnerSuccess,) = winner.call{value: disputerTotal}("");
+            if (!winnerSuccess) {
+                revert OracleAdapter__ETHTransferFailed();
+            }
+
+            (bool resolverSuccess,) = msg.sender.call{value: resolverShare}("");
+            if (!resolverSuccess) {
                 revert OracleAdapter__ETHTransferFailed();
             }
             
-            (bool feesSuccess,) = i_platformFeeRecipient.call{value: platformFee}("");
-            if (!feesSuccess) {
+            (bool platformSuccess,) = i_platformFeeRecipient.call{value: platformFee + PROPOSER_BOUNTY}("");
+            if (!platformSuccess) {
                 revert OracleAdapter__ETHTransferFailed();
             }
             
@@ -325,7 +333,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
 
     /**
      * @notice Finalize an undisputed outcome after dispute window closes
-     * @dev Only callable by SettlementEngine. Returns proposer bond + fixed bounty.
+     * @dev Only callable by SettlementEngine. Returns proposer bond + fixed proposer bounty.
      *      Fixed bounty incentivizes fast, truthful oracle proposals.
      * @param market The market to finalize
      * @custom:reverts OracleAdapter__OutcomeNotProposed If no outcome proposed
@@ -349,15 +357,15 @@ contract OracleAdapter is ReentrancyGuard, Ownable, Pausable {
 
         request.finalized = true;
 
-        // Return proposer bond + fixed bounty reward
-        uint256 totalReward = i_proposerBond + i_fixedBounty;
+        // Return proposer bond + fixed proposer bounty reward
+        uint256 totalReward = i_proposerBond + PROPOSER_BOUNTY;
 
         (bool success,) = (request.proposer).call{value: totalReward}("");
         if (!success) {
             revert OracleAdapter__ETHTransferFailed();
         }
 
-        emit BountyPaid(market, request.proposer, i_fixedBounty);
+        emit BountyPaid(market, request.proposer, PROPOSER_BOUNTY);
         emit OutcomeFinalized(market, request.proposedOutcome);
     }
 
