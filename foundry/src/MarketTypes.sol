@@ -19,6 +19,7 @@ enum MarketState {
 }
 
 enum Outcome {
+    INVALID,  
     YES,
     NO
 }

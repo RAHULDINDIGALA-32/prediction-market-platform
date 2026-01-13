@@ -382,4 +382,33 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
         }
         return requests[market].proposedOutcome;
     }
+
+    /**
+     * @notice Get the proposal timestamp for a market
+     * @dev Used by SettlementEngine to determine if dispute window is closed
+     * @param market The market address
+     * @return uint256 Timestamp when outcome was proposed (0 if not proposed)
+     */
+    function getProposalTime(address market) external view returns (uint256) {
+        return requests[market].proposedAt;
+    }
+
+    /**
+     * @notice Check if an outcome has been disputed
+     * @dev Used by SettlementEngine to determine if outcome can be auto-finalized
+     * @param market The market address
+     * @return bool True if outcome is currently disputed
+     */
+    function isDisputed(address market) external view returns (bool) {
+        return requests[market].disputed;
+    }
+
+    /**
+     * @notice Get the dispute window duration
+     * @dev Used by SettlementEngine to check if dispute window has closed
+     * @return uint256 Dispute window duration in seconds
+     */
+    function getDisputeWindow() external view returns (uint256) {
+        return i_disputeWindow;
+    }
 }

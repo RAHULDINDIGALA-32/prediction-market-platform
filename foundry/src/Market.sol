@@ -30,6 +30,7 @@ contract Market is ReentrancyGuard {
     MarketState public state;
     uint256 public immutable i_endTime;
     uint256 public immutable i_lmsrB; // LMSR liquidity parameter for pricing
+    Outcome public resolvedOutcome =  Outcome.INVALID; // YES, NO, or INVALID (default)
 
     mapping(bytes32 quoteHash => bool isUsed) public usedQuoteHashes;
 
@@ -45,7 +46,7 @@ contract Market is ReentrancyGuard {
     );
 
     event MarketClosed(uint256 indexed timestamp);
-    event MarketResolve(Outcome indexed outcome);
+    event MarketResolved(Outcome indexed outcome);
     event MarketSettled(uint256 indexed timestamp);
 
     //////////////////////////
@@ -61,6 +62,7 @@ contract Market is ReentrancyGuard {
     error Market__MarketNotClosed();
     error Market__InvalidAddress();
     error Market__SlippageExceeded();
+    error Market__OutcomeConflict();
 
     //////////////////////////
     /// MODIFIERS //////
@@ -227,38 +229,39 @@ contract Market is ReentrancyGuard {
  
 
     /**
-     * @notice Resolve the market with a final outcome
-     * @dev Can only be called by SettlementEngine or Factory. Auto-closes market if expired.
-     * Transitions market from CLOSED -> RESOLVED (oracle outcome finalized).
-     * @param outcome The final outcome (YES or NO) for the market
-     * @custom:reverts Market__MarketNotClosed If market is not closed or expired
+     * @notice Resolve the market with a final outcome (callback from SettlementEngine)
+     * @dev Only callable by SettlementEngine. Passive state receiver pattern.
+     * @param outcome The final oracle-determined outcome (YES or NO)
+     * @custom:reverts Market__Unauthorized If caller is not SettlementEngine
      */
-    function resolveMarket(Outcome outcome) external onlySettlementEngine {
-        _ensureClosedIfExpired();
-        if (state != MarketState.CLOSED) {
-            revert Market__MarketNotClosed();
+    function onResolved(Outcome outcome) external onlySettlementEngine {
+        if(state != MarketState.OPEN) {
+            revert Market__MarketNotOpen();
         }
 
+        if (resolvedOutcome != Outcome.INVALID && resolvedOutcome != outcome) {
+            revert Market__OutcomeConflict();
+        }
+        
+        resolvedOutcome = outcome;
         state = MarketState.RESOLVED;
         emit MarketResolved(outcome);
     }
 
     /**
-    * @notice Settle the market
-    * @dev Can only be called by SettlementEngine. Transitions market from RESOLVED -> SETTLED.
-    */
-    function settleMarket() external onlySettlementEngine() {
-
+     * @notice Mark market as fully settled (30+ days after resolution)
+     * @dev Only callable by SettlementEngine after redemption window closes
+     * @custom:reverts Market__Unauthorized If caller is not SettlementEngine
+     */
+    function onSettled() external onlySettlementEngine {
         if (state != MarketState.RESOLVED) {
             revert Market__MarketNotResolved();
         }
-
         state = MarketState.SETTLED;
         emit MarketSettled(block.timestamp);
-    } 
+    }
 
-    
-
+  
     //////////////////////////
     /// Internal Functions ///
     //////////////////////////
