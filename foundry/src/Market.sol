@@ -95,7 +95,6 @@ contract Market is ReentrancyGuard {
     //////////////////////////
     /**
      * @notice Initialize a new prediction market
-     * @param _factory Address of the MarketFactory contract
      * @param _vault Address of the Vault contract for ETH custody
      * @param _quoteVerifier Address of the QuoteVerifier contract
      * @param _settlementEngine Address of the SettlementEngine contract

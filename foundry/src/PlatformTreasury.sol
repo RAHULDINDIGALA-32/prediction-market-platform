@@ -42,7 +42,7 @@ contract PlatformTreasury is ReentrancyGuard, Ownable {
 
     /**
      * @notice Initialize PlatformTreasury
-     * @param _owner Address of contract owner 
+     * @param _owner Address of contract owner
      */
     constructor(address _owner) Ownable(_owner) {
         if (_owner == address(0)) {
@@ -63,13 +63,13 @@ contract PlatformTreasury is ReentrancyGuard, Ownable {
         totalFees += msg.value;
         accruedCreationFee += msg.value;
 
-        emit FeeDeposited(market, msg.value);
+        emit CreationFeeDeposited(market, msg.value);
     }
 
     /**
      * @notice Deposit fees from disputed bond resolution
      * @dev Called by OracleAdapter when dispute is resolved
-     * @param source The source of the fee (e.g., "DISPUTE_RESOLUTION")
+     * @param market The market address fee is for
      */
     function depositDisputeFee(address market) external payable nonReentrant {
         if (msg.value == 0) {
@@ -107,8 +107,6 @@ contract PlatformTreasury is ReentrancyGuard, Ownable {
 
         emit FeeWithdrawn(recipient, amount);
     }
-
-
 
     /**
      * @notice Get total balance in treasury

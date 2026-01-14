@@ -35,12 +35,7 @@ contract SettlementEngine is ReentrancyGuard {
     event MarketResolved(address indexed market, Outcome indexed outcome);
     event RedemptionClosed(address indexed market, uint256 indexed closedAt);
     event CreatorWithdrawn(address indexed market, address indexed creator, uint256 indexed amount);
-    event Redeemed(
-        address indexed market,
-        address indexed user,
-        uint256 indexed winningTokenAmount,
-        uint256 ethPaid
-    );
+    event Redeemed(address indexed market, address indexed user, uint256 indexed winningTokenAmount, uint256 ethPaid);
 
     //////////////////////////
     /// ERRORS ///
@@ -54,7 +49,7 @@ contract SettlementEngine is ReentrancyGuard {
     error SettlementEngine__InvalidAmount();
     error SettlementEngine__InvalidAddress();
     error SettlementEngine__RedemptionWindowClosed();
-    error SettlementEngine__RedemptionWindowNotClosed()
+    error SettlementEngine__RedemptionWindowNotClosed();
     error SettlementEngine__UnauthorizedCreator();
     error SettlementEngine__ETHTransferFailed();
 
@@ -77,8 +72,6 @@ contract SettlementEngine is ReentrancyGuard {
         i_factory = MarketFactory(_factory);
     }
 
-
-
     //////////////////////////
     /// External Functions ///
     //////////////////////////
@@ -100,10 +93,10 @@ contract SettlementEngine is ReentrancyGuard {
         if (redemptionClosed[market]) {
             return;
         }
-        
+
         uint256 resolvedAt = marketResolvedAt[market];
         if (block.timestamp < resolvedAt + REDEMPTION_PERIOD) {
-            revert SettlementEngine__RedemptionWindowNotClosed(); 
+            revert SettlementEngine__RedemptionWindowNotClosed();
         }
 
         redemptionClosed[market] = true;
@@ -136,7 +129,7 @@ contract SettlementEngine is ReentrancyGuard {
         }
 
         uint256 remainingBalance = i_vault.balanceOf(market);
-        
+
         if (remainingBalance > 0) {
             i_vault.withdraw(market, creator, remainingBalance);
         }
@@ -157,15 +150,14 @@ contract SettlementEngine is ReentrancyGuard {
      * @custom:reverts SettlementEngine__InsufficientVaultBalance If vault depleted
      */
     function redeem(address market, uint256 amount) external nonReentrant {
-         // Lazy resolution: resolve market if not yet done
+        // Lazy resolution: resolve market if not yet done
         _ensureResolved(market);
 
-    
         uint256 resolvedAt = marketResolvedAt[market];
         if (block.timestamp >= resolvedAt + REDEMPTION_PERIOD) {
             revert SettlementEngine__RedemptionWindowClosed();
         }
-        
+
         if (amount == 0) {
             revert SettlementEngine__InvalidAmount();
         }
@@ -200,7 +192,6 @@ contract SettlementEngine is ReentrancyGuard {
         emit Redeemed(market, msg.sender, amount, ethToPay);
     }
 
-
     //////////////////////////
     /// Internal Functions ///
     //////////////////////////
@@ -209,13 +200,13 @@ contract SettlementEngine is ReentrancyGuard {
      * @notice Lazily resolve market on first interaction after oracle finality
      * @dev Implements complete lazy settlement: oracle finalization + market resolution
      * Idempotent: safe to call multiple times
-     * 
+     *
      * Flow:
      * 1. Check if already resolved (quick return)
      * 2. Ensure oracle outcome is finalized (lazy oracle finalization)
      * 3. Record market resolution timestamp
      * 4. Notify Market via callback
-     * 
+     *
      * Called implicitly before: redeem(), creatorWithdraw()
      * @param market The market address
      * @custom:reverts SettlementEngine__OracleOutcomeNotResolved If oracle can't be finalized
@@ -245,7 +236,7 @@ contract SettlementEngine is ReentrancyGuard {
      * - If already finalized: return (idempotent)
      * - If undisputed and window closed: finalize automatically
      * - If disputed: revert (let resolver handle it)
-     * - If window not closed: revert (too early) 
+     * - If window not closed: revert (too early)
      * @param market The market address
      * @custom:reverts SettlementEngine__OracleOutcomeNotResolved If oracle can't be finalized
      */
@@ -268,13 +259,13 @@ contract SettlementEngine is ReentrancyGuard {
      * - Not yet finalized
      * - Not disputed (undisputed case only)
      * - Dispute window has closed
-     * 
+     *
      * Silent return if conditions not met (no-op, caller checks via isFinalized)
-     * 
+     *
      * This is the key to lazy oracle finalization:
      * The system automatically finalizes undisputed outcomes
      * when the dispute window closes, without needing manual intervention.
-     * 
+     *
      * @param market The market address
      */
     function _tryFinalizeOracle(address market) internal {
@@ -319,5 +310,4 @@ contract SettlementEngine is ReentrancyGuard {
         uint256 resolved = marketResolvedAt[market];
         return resolved != 0 && block.timestamp >= resolved + REDEMPTION_PERIOD;
     }
-    
 }
