@@ -24,7 +24,7 @@ contract FundFlowIntegrationTest is Test {
     //////////////////////////
     /// TEST SETUP ///
     //////////////////////////
-    
+
     MarketFactory factory;
     Vault vault;
     OracleAdapter oracle;
@@ -52,25 +52,33 @@ contract FundFlowIntegrationTest is Test {
     bytes32 constant MARKET_METADATA_HASH = keccak256("test_market_metadata");
 
     function setUp() public {
-        // Deploy contracts
-        vault = new Vault();
-        oracleBudget = new OracleBudget(address(0), owner);
+        // Deploy contracts in dependency order
+        // Phase 1: Deploy independent contracts
+        vault = new Vault(address(0), address(0)); // Placeholder addresses, fix later
+        quoteVerifier = new QuoteVerifier(owner);
+        oracleBudget = new OracleBudget(address(0), owner); // Oracle address set later
         platformTreasury = new PlatformTreasury(owner);
-        quoteVerifier = new QuoteVerifier();
-        
+
+        // Phase 2: Deploy OracleAdapter
         oracle = new OracleAdapter(
             PROPOSER_BOND,
-            7 days,        // dispute window
+            7 days, // dispute window
             DISPUTER_BOND,
-            3 days,        // resolution deadline
-            address(0),    // settlement engine (set after creation)
-            address(oracleBudget),
-            address(platformTreasury),
+            3 days, // resolution deadline
+            address(0), // settlement engine (set after creation)
+            payable(address(oracleBudget)),
+            payable(address(platformTreasury)),
             owner
         );
-        
-        settlement = new SettlementEngine(address(oracle), address(vault), address(0));
-        
+
+        // Phase 3: Deploy SettlementEngine
+        settlement = new SettlementEngine(
+            address(oracle),
+            address(vault),
+            address(0) // marketFactory (set after creation)
+        );
+
+        // Phase 4: Deploy MarketFactory
         factory = new MarketFactory(
             address(vault),
             address(oracle),
@@ -116,12 +124,8 @@ contract FundFlowIntegrationTest is Test {
 
         // Create market
         vm.prank(creator);
-        address market = factory.createMarket{value: totalDeposit}(
-            MARKET_METADATA_HASH,
-            block.timestamp + 30 days,
-            LMSR_B,
-            SUBSIDY
-        );
+        address market =
+            factory.createMarket{value: totalDeposit}(MARKET_METADATA_HASH, block.timestamp + 30 days, LMSR_B, SUBSIDY);
 
         // Verify creator balance decreased
         assertEq(creator.balance, creatorBalance - totalDeposit);
@@ -146,10 +150,7 @@ contract FundFlowIntegrationTest is Test {
         vm.prank(creator);
         vm.expectRevert(MarketFactory.MarketFactory__InvalidSubsidy.selector);
         factory.createMarket{value: totalDeposit}(
-            MARKET_METADATA_HASH,
-            block.timestamp + 30 days,
-            LMSR_B,
-            insufficientSubsidy
+            MARKET_METADATA_HASH, block.timestamp + 30 days, LMSR_B, insufficientSubsidy
         );
     }
 
@@ -168,10 +169,7 @@ contract FundFlowIntegrationTest is Test {
         // Setup: Create market and expire it
         vm.prank(creator);
         address market = factory.createMarket{value: SUBSIDY + CREATION_FEE_TOTAL}(
-            MARKET_METADATA_HASH,
-            block.timestamp + 30 days,
-            LMSR_B,
-            SUBSIDY
+            MARKET_METADATA_HASH, block.timestamp + 30 days, LMSR_B, SUBSIDY
         );
 
         // Skip to after market expiration
@@ -192,10 +190,10 @@ contract FundFlowIntegrationTest is Test {
         // Verify proposer received: bond + bounty
         uint256 proposerBalanceAfter = proposer.balance;
         uint256 received = proposerBalanceAfter - proposerBalanceBefore;
-        
+
         // Should receive bond + bounty paid from OracleBudget
         assertEq(received, PROPOSER_BOND); // Direct bond return
-        
+
         // Verify bounty was marked as claimed in OracleBudget
         assertTrue(oracleBudget.isBountyClaimed(market));
     }
@@ -215,10 +213,7 @@ contract FundFlowIntegrationTest is Test {
         // Setup: Create market and expire it
         vm.prank(creator);
         address market = factory.createMarket{value: SUBSIDY + CREATION_FEE_TOTAL}(
-            MARKET_METADATA_HASH,
-            block.timestamp + 30 days,
-            LMSR_B,
-            SUBSIDY
+            MARKET_METADATA_HASH, block.timestamp + 30 days, LMSR_B, SUBSIDY
         );
 
         vm.warp(block.timestamp + 31 days);
@@ -233,7 +228,7 @@ contract FundFlowIntegrationTest is Test {
 
         // Resolver resolves (proposer was correct)
         uint256 treasuryBefore = platformTreasury.getBalance();
-        
+
         vm.prank(resolver);
         oracle.resolveOutcome(market, Outcome.YES, true);
 
@@ -250,10 +245,7 @@ contract FundFlowIntegrationTest is Test {
         // Setup: Create market and expire it
         vm.prank(creator);
         address market = factory.createMarket{value: SUBSIDY + CREATION_FEE_TOTAL}(
-            MARKET_METADATA_HASH,
-            block.timestamp + 30 days,
-            LMSR_B,
-            SUBSIDY
+            MARKET_METADATA_HASH, block.timestamp + 30 days, LMSR_B, SUBSIDY
         );
 
         vm.warp(block.timestamp + 31 days);
@@ -273,10 +265,7 @@ contract FundFlowIntegrationTest is Test {
 
         // Verify disputer received payout
         uint256 disputerBalanceAfter = disputer.balance;
-        assertTrue(
-            disputerBalanceAfter > disputerBalanceBefore,
-            "Disputer should receive bond back + share"
-        );
+        assertTrue(disputerBalanceAfter > disputerBalanceBefore, "Disputer should receive bond back + share");
     }
 
     //////////////////////////
@@ -294,47 +283,44 @@ contract FundFlowIntegrationTest is Test {
         // Setup: Create and expire market
         vm.prank(creator);
         address market = factory.createMarket{value: SUBSIDY + CREATION_FEE_TOTAL}(
-            MARKET_METADATA_HASH,
-            block.timestamp + 30 days,
-            LMSR_B,
-            SUBSIDY
+            MARKET_METADATA_HASH, block.timestamp + 30 days, LMSR_B, SUBSIDY
         );
 
         // Trade execution (simplified - would need proper signature verification)
         // Traders mint tokens and deposit ETH
         Market marketContract = Market(market);
         OutcomeToken yesToken = OutcomeToken(marketContract.winningToken(Outcome.YES));
-        
+
         // Simulate token ownership for trader1
         // (In real test, would use proper TradeQuote + signature)
-        
+
         // Expire market
         vm.warp(block.timestamp + 31 days);
-        
+
         // Close market
         marketContract.closeMarket();
-        
+
         // Propose and finalize outcome
         vm.prank(proposer);
         oracle.proposeOutcome{value: PROPOSER_BOND}(market, Outcome.YES);
-        
+
         vm.warp(block.timestamp + 8 days);
         vm.prank(address(settlement));
         oracle.finalize(market);
-        
-        // Settle market
-        settlement.settleMarket(market);
+
+        // Close redemption window
+        settlement.closeRedemption(market);
 
         // Verify market is in RESOLVED state
-        (MarketState state,,,,,,,,) = marketContract.getMarketInfo();
-        assertEq(uint(state), uint(MarketState.RESOLVED));
+        (MarketState state,,,,,,,) = marketContract.getMarketInfo();
+        assertEq(uint256(state), uint256(MarketState.RESOLVED));
 
         // Attempt redemption within window (should succeed if user has tokens)
         // (Would need proper token setup)
 
         // Skip to after redemption window
         vm.warp(block.timestamp + 31 days);
-        
+
         // Close redemption
         settlement.closeRedemption(market);
 
@@ -358,10 +344,7 @@ contract FundFlowIntegrationTest is Test {
         // Setup: Create market
         vm.prank(creator);
         address market = factory.createMarket{value: SUBSIDY + CREATION_FEE_TOTAL}(
-            MARKET_METADATA_HASH,
-            block.timestamp + 30 days,
-            LMSR_B,
-            SUBSIDY
+            MARKET_METADATA_HASH, block.timestamp + 30 days, LMSR_B, SUBSIDY
         );
 
         // Expire and resolve market
@@ -375,8 +358,6 @@ contract FundFlowIntegrationTest is Test {
         vm.warp(block.timestamp + 8 days);
         vm.prank(address(settlement));
         oracle.finalize(market);
-
-        settlement.settleMarket(market);
 
         // Attempt withdrawal before window closes (should fail)
         vm.prank(creator);
@@ -406,10 +387,7 @@ contract FundFlowIntegrationTest is Test {
         // Setup: Create market
         vm.prank(creator);
         address market = factory.createMarket{value: SUBSIDY + CREATION_FEE_TOTAL}(
-            MARKET_METADATA_HASH,
-            block.timestamp + 30 days,
-            LMSR_B,
-            SUBSIDY
+            MARKET_METADATA_HASH, block.timestamp + 30 days, LMSR_B, SUBSIDY
         );
 
         // Expire and resolve
@@ -423,8 +401,6 @@ contract FundFlowIntegrationTest is Test {
         vm.warp(block.timestamp + 8 days);
         vm.prank(address(settlement));
         oracle.finalize(market);
-
-        settlement.settleMarket(market);
 
         // Skip to after window
         vm.warp(block.timestamp + 31 days);
@@ -448,22 +424,19 @@ contract FundFlowIntegrationTest is Test {
         // Create market in OPEN state
         vm.prank(creator);
         address market = factory.createMarket{value: SUBSIDY + CREATION_FEE_TOTAL}(
-            MARKET_METADATA_HASH,
-            block.timestamp + 30 days,
-            LMSR_B,
-            SUBSIDY
+            MARKET_METADATA_HASH, block.timestamp + 30 days, LMSR_B, SUBSIDY
         );
 
         Market marketContract = Market(market);
-        (MarketState state,,,,,,,,) = marketContract.getMarketInfo();
-        assertEq(uint(state), uint(MarketState.OPEN));
+        (MarketState state,,,,,,,) = marketContract.getMarketInfo();
+        assertEq(uint256(state), uint256(MarketState.OPEN));
 
         // Expire and close market
         vm.warp(block.timestamp + 31 days);
         marketContract.closeMarket();
 
-        (state,,,,,,,,) = marketContract.getMarketInfo();
-        assertEq(uint(state), uint(MarketState.CLOSED));
+        (state,,,,,,,) = marketContract.getMarketInfo();
+        assertEq(uint256(state), uint256(MarketState.CLOSED));
 
         // Propose outcome
         vm.prank(proposer);
@@ -474,11 +447,9 @@ contract FundFlowIntegrationTest is Test {
         vm.prank(address(settlement));
         oracle.finalize(market);
 
-        // Settle market (move to RESOLVED)
-        settlement.settleMarket(market);
-
-        (state,,,,,,,,) = marketContract.getMarketInfo();
-        assertEq(uint(state), uint(MarketState.RESOLVED));
+        // Market moves to RESOLVED after oracle finalization
+        (state,,,,,,,) = marketContract.getMarketInfo();
+        assertEq(uint256(state), uint256(MarketState.RESOLVED));
     }
 
     //////////////////////////
@@ -492,10 +463,7 @@ contract FundFlowIntegrationTest is Test {
         // Create market
         vm.prank(creator);
         address market = factory.createMarket{value: SUBSIDY + CREATION_FEE_TOTAL}(
-            MARKET_METADATA_HASH,
-            block.timestamp + 30 days,
-            LMSR_B,
-            SUBSIDY
+            MARKET_METADATA_HASH, block.timestamp + 30 days, LMSR_B, SUBSIDY
         );
 
         // Verify fund distribution
@@ -503,9 +471,8 @@ contract FundFlowIntegrationTest is Test {
         assertEq(oracleBudget.getBounty(market), ORACLE_BOUNTY, "OracleBudget should hold bounty");
         assertEq(platformTreasury.getBalance(), PLATFORM_FEE, "Treasury should hold fee");
 
-        uint256 totalFundsDeployed = vault.balanceOf(market) + 
-                                     oracleBudget.getBounty(market) + 
-                                     platformTreasury.getBalance();
+        uint256 totalFundsDeployed =
+            vault.balanceOf(market) + oracleBudget.getBounty(market) + platformTreasury.getBalance();
 
         assertEq(totalFundsDeployed, SUBSIDY + CREATION_FEE_TOTAL, "All funds accounted for");
     }

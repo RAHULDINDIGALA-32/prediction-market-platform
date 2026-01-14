@@ -17,7 +17,7 @@ import {QuoteVerifier} from "../src/QuoteVerifier.sol";
 import {OutcomeToken} from "../src/OutcomeToken.sol";
 import {OracleBudget} from "../src/OracleBudget.sol";
 import {PlatformTreasury} from "../src/PlatformTreasury.sol";
-import {Outcome, MarketState} from "../src/MarketTypes.sol";
+import {Outcome, MarketState, TradeQuote} from "../src/MarketTypes.sol";
 
 contract MarketStateAndInvariantsTest is Test {
     //////////////////////////
@@ -58,18 +58,9 @@ contract MarketStateAndInvariantsTest is Test {
         oracleBudget = new OracleBudget();
         platformTreasury = new PlatformTreasury();
 
-        oracle = new OracleAdapter(
-            0.01 ether,
-            0.01 ether,
-            2 days,
-            7 days
-        );
+        oracle = new OracleAdapter(0.01 ether, 0.01 ether, 2 days, 7 days);
 
-        settlementEngine = new SettlementEngine(
-            address(oracle),
-            address(vault),
-            address(factory)
-        );
+        settlementEngine = new SettlementEngine(address(oracle), address(vault), address(factory));
 
         factory = new MarketFactory(
             address(vault),
@@ -110,8 +101,8 @@ contract MarketStateAndInvariantsTest is Test {
 
         // Attempting to trade should fail
         vm.expectRevert(Market.Market__MarketExpired.selector);
-        marketContract.executeTrade(
-            /* args */ _dummyQuote(),
+        marketContract.executeTrade( /* args */
+            _dummyQuote(),
             _dummySignature(),
             0,
             0
@@ -209,6 +200,7 @@ contract MarketStateAndInvariantsTest is Test {
 
     function testInvariant_TotalRedemptionBudget_LessThanOrEqual_VaultBalance() public {
         address market = _createMarket();
+        Market marketContract = Market(market);
 
         // Add various amounts to vault through trading
         marketContract.i_yesToken().mint(trader1, 2 ether);
@@ -231,6 +223,7 @@ contract MarketStateAndInvariantsTest is Test {
 
     function testInvariant_NoETHLeak_ThroughRedemption() public {
         address market = _createMarket();
+        Market marketContract = Market(market);
 
         uint256 initialCreatorBalance = creator.balance;
         uint256 initialTraderBalance = trader1.balance;
@@ -265,8 +258,8 @@ contract MarketStateAndInvariantsTest is Test {
         uint256 finalVaultBalance = vault.balanceOf(market);
 
         // Verify ETH flow
-        uint256 totalPayedOut = (finalCreatorBalance - initialCreatorBalance) +
-                               (finalTraderBalance - initialTraderBalance);
+        uint256 totalPayedOut =
+            (finalCreatorBalance - initialCreatorBalance) + (finalTraderBalance - initialTraderBalance);
 
         uint256 totalDeposited = marketCreationFee + subsidyAmount + tradeAmount;
         uint256 totalFeesDeducted = marketCreationFee; // 0.03 ETH
@@ -399,14 +392,12 @@ contract MarketStateAndInvariantsTest is Test {
     //////////////////////////
 
     function _createMarket() private returns (address) {
-        bytes32 metadataHash = keccak256(
-            abi.encode("state test", block.timestamp, blockhash(block.number - 1))
-        );
+        bytes32 metadataHash = keccak256(abi.encode("state test", block.timestamp, blockhash(block.number - 1)));
 
         vm.prank(creator);
-        return factory.createMarket{
-            value: marketCreationFee + subsidyAmount
-        }(metadataHash, marketEndTime, lmsrB, subsidyAmount);
+        return factory.createMarket{value: marketCreationFee + subsidyAmount}(
+            metadataHash, marketEndTime, lmsrB, subsidyAmount
+        );
     }
 
     function _proposeAndSettle(address market, Outcome outcome) private {
@@ -416,9 +407,7 @@ contract MarketStateAndInvariantsTest is Test {
         vm.warp(block.timestamp + 2 days + 1);
 
         Market marketContract = Market(market);
-        OutcomeToken winningToken = OutcomeToken(
-            marketContract.winningToken(outcome)
-        );
+        OutcomeToken winningToken = OutcomeToken(marketContract.winningToken(outcome));
 
         uint256 supply = winningToken.totalSupply();
         if (supply > 0) {
@@ -436,16 +425,10 @@ contract MarketStateAndInvariantsTest is Test {
         }
     }
 
-    function _mintAndRedeem(
-        address market,
-        address trader,
-        Outcome outcome
-    ) private {
+    function _mintAndRedeem(address market, address trader, Outcome outcome) private {
         Market marketContract = Market(market);
 
-        OutcomeToken winningToken = OutcomeToken(
-            marketContract.winningToken(outcome)
-        );
+        OutcomeToken winningToken = OutcomeToken(marketContract.winningToken(outcome));
 
         uint256 amount = 0.5 ether;
         winningToken.mint(trader, amount);
@@ -457,25 +440,22 @@ contract MarketStateAndInvariantsTest is Test {
         settlementEngine.redeem(market, amount);
     }
 
-    function _dummyQuote() private pure returns (Market.TradeQuote memory) {
-        return Market.TradeQuote({
+    function _dummyQuote() private pure returns (TradeQuote memory) {
+        return TradeQuote({
             market: address(0),
             trader: address(0),
             outcome: Outcome.YES,
             amount: 0,
             cost: 0,
+            deadline: 0,
             nonce: 0,
-            expiry: 0,
-            isSell: false
+            isSell: false,
+            minAmountOut: 0,
+            minReturn: 0
         });
     }
 
     function _dummySignature() private pure returns (bytes memory) {
         return new bytes(65);
-    }
-
-    // Shorthand
-    function marketContract() private view returns (Market) {
-        return Market(address(0));
     }
 }

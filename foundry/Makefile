@@ -1,19 +1,38 @@
 // Makefile for common project tasks
 
-.PHONY: forge-test forge-clean dapp-install dapp-dev prisma-migrate backfill-nonces integration-test
+.PHONY: forge-test forge-clean forge-build forge-deploy forge-coverage dapp-install dapp-dev prisma-migrate backfill-nonces integration-test
 
-forge-test:
-	cd foundry && forge test -v
+test:
+	forge test -v
 
-forge-clean:
-	cd foundry && forge clean
+test-verbose:
+	forge test -vvv
 
-forge-coverage:
-	forge coverage
+build:
+	forge build
 
-forge-deploy:
-	# Example: make forge-deploy RPC_URL=<rpc> PK=<private_key>
-	forge script script/Deploy.s.sol --broadcast --rpc-url $(RPC_URL) --private-key $(PK)
+fclean:
+	forge clean
+
+coverage:
+	forge coverage --report lcov
+
+deploy-local:
+	@echo "Deploying to localhost..."
+	forge script script/DeployPlatform.s.sol --broadcast --rpc-url http://localhost:8545 -vv
+
+deploy-testnet:
+	@echo "Deploying to testnet. Usage: make forge-deploy-testnet RPC_URL=<url> PRIVATE_KEY=<key>"
+	@if [ -z "$(RPC_URL)" ]; then echo "Error: RPC_URL not set"; exit 1; fi
+	@if [ -z "$(PRIVATE_KEY)" ]; then echo "Error: PRIVATE_KEY not set"; exit 1; fi
+	forge script script/DeployPlatform.s.sol --broadcast --rpc-url $(RPC_URL) --private-key $(PRIVATE_KEY) -vv
+
+deploy-mainnet:
+	@echo "WARNING: Deploying to mainnet!"
+	@echo "Usage: make forge-deploy-mainnet RPC_URL=<url> PRIVATE_KEY=<key>"
+	@if [ -z "$(RPC_URL)" ]; then echo "Error: RPC_URL not set"; exit 1; fi
+	@if [ -z "$(PRIVATE_KEY)" ]; then echo "Error: PRIVATE_KEY not set"; exit 1; fi
+	forge script script/DeployPlatform.s.sol --broadcast --rpc-url $(RPC_URL) --private-key $(PRIVATE_KEY) -vv
 
 dapp-install:
 	cd dapp && npm ci

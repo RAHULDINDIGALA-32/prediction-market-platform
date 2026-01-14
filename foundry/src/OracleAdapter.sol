@@ -30,7 +30,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
     //////////////////////////
     /// STATE VARIABLES //////
     //////////////////////////
-    uint256 public constant PROPOSER_BOUNTY = 0.02 ether; 
+    uint256 public constant PROPOSER_BOUNTY = 0.02 ether;
     uint256 public constant RESOLUTION_FEE_PERCENTAGE = 5000; // Dispute Resolution fee (% share in Loser Bond) (5000 = 50%)
     uint256 public constant RESOLVER_BOUNTY_PERCENTAGE = 5000; // Resolver bounty (% share in Resolution Fee) (5000 = 50%)
 
@@ -115,11 +115,14 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
         uint256 _disputerBond,
         uint256 _resolutionDeadline,
         address _settlementEngine,
-        address _oracleBudget,
-        address _platformTreasury,
+        address payable _oracleBudget,
+        address payable _platformTreasury,
         address _owner
     ) Ownable(_owner) {
-        if (_settlementEngine == address(0) || _oracleBudget == address(0) || _platformTreasury == address(0) || _owner == address(0)) {
+        if (
+            _settlementEngine == address(0) || _oracleBudget == address(0) || _platformTreasury == address(0)
+                || _owner == address(0)
+        ) {
             revert OracleAdapter__InvalidAddress();
         }
 
@@ -149,7 +152,6 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
         resolvers[resolver] = allowed;
     }
 
-   
     /**
      * @notice Propose an outcome for a market
      * @dev Optimistically assumed correct unless disputed. Requires proposer bond.
@@ -255,19 +257,19 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
 
         address winner;
         uint256 loserBond;
-        
+
         if (isProposerCorrect) {
             // Proposer was correct
             winner = request.proposer;
             loserBond = i_disputerBond;
-            
+
             // Proposer gets: bond back + bounty + (1 - fee) * disputer bond
             uint256 resolutionFee = (loserBond * RESOLUTION_FEE_PERCENTAGE) / 10000;
             uint256 winnerShare = loserBond - resolutionFee;
             uint256 proposerTotal = i_proposerBond + winnerShare;
             uint256 resolverShare = (resolutionFee * RESOLVER_BOUNTY_PERCENTAGE) / 10000;
             uint256 platformFee = resolutionFee - resolverShare;
-            
+
             (bool winnerSuccess,) = winner.call{value: proposerTotal}("");
             if (!winnerSuccess) {
                 revert OracleAdapter__ETHTransferFailed();
@@ -280,23 +282,23 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
             if (!resolverSuccess) {
                 revert OracleAdapter__ETHTransferFailed();
             }
-            
+
             i_platformTreasury.depositDisputeFee{value: platformFee}(market);
-            
+
             emit BondRedistributed(market, winner, proposerTotal);
             emit PlatformFeePaid(platformFee);
         } else {
             // Disputer was correct
             winner = request.disputer;
             loserBond = i_proposerBond;
-            
+
             // Disputer gets: bond back + (1 - fee) * proposer bond
             uint256 resolutionFee = (loserBond * RESOLUTION_FEE_PERCENTAGE) / 10000;
             uint256 winnerShare = loserBond - resolutionFee;
             uint256 disputerTotal = i_disputerBond + winnerShare;
             uint256 resolverShare = (resolutionFee * RESOLVER_BOUNTY_PERCENTAGE) / 10000;
             uint256 platformFee = resolutionFee - resolverShare;
-            
+
             (bool winnerSuccess,) = winner.call{value: disputerTotal}("");
             if (!winnerSuccess) {
                 revert OracleAdapter__ETHTransferFailed();
@@ -306,12 +308,11 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
             if (!resolverSuccess) {
                 revert OracleAdapter__ETHTransferFailed();
             }
-            
+
             i_platformTreasury.depositDisputeFee{value: platformFee}(market);
             // Pull bounty from OracleBudget (disputed but disputer was correct)
             i_oracleBudget.payBounty(market, address(i_platformTreasury), PROPOSER_BOUNTY);
 
-            
             emit BondRedistributed(market, winner, disputerTotal);
             emit PlatformFeePaid(platformFee);
         }

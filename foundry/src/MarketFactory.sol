@@ -20,7 +20,7 @@ contract MarketFactory {
     /// STATE VARIABLES ///
     //////////////////////////
     uint256 public constant MAX_MARKET_DURATION = 365 days;
-    uint256 public constant MARKET_CREATION_FEE = 0.03 ether; 
+    uint256 public constant MARKET_CREATION_FEE = 0.03 ether;
 
     Vault public immutable i_vault;
     OracleAdapter public immutable i_oracle;
@@ -32,7 +32,7 @@ contract MarketFactory {
 
     // Whitelisted market creators
     mapping(address creator => bool isWhitelisted) public whitelistedCreators;
-    
+
     // Track creator deposits (subsidy tracking)
     mapping(address market => address creator) public marketCreator;
     mapping(address market => uint256 subsidy) public marketSubsidy;
@@ -47,11 +47,7 @@ contract MarketFactory {
     //////////////////////////
     /// EVENTS ///
     event MarketCreated(
-        address indexed market,
-        bytes32 indexed metadataHash,
-        uint256 indexed endTime,
-        address creator,
-        uint256 subsidy
+        address indexed market, bytes32 indexed metadataHash, uint256 indexed endTime, address creator, uint256 subsidy
     );
     event CreatorWhitelisted(address indexed creator, bool isWhitelisted);
 
@@ -94,20 +90,16 @@ contract MarketFactory {
     constructor(
         address _vault,
         address _oracle,
-        address _oracleBudget,
-        address _platformTreasury,
+        address payable _oracleBudget,
+        address payable _platformTreasury,
         address _quoteVerifier,
         address _settlementEngine,
         address _owner
     ) {
         if (
-            _vault == address(0)
-            || _oracle == address(0)
-            || _oracleBudget == address(0)
-            || _platformTreasury == address(0)
-            || _quoteVerifier == address(0)
-            || _settlementEngine == address(0)
-            || _owner == address(0)
+            _vault == address(0) || _oracle == address(0) || _oracleBudget == address(0)
+                || _platformTreasury == address(0) || _quoteVerifier == address(0) || _settlementEngine == address(0)
+                || _owner == address(0)
         ) {
             revert MarketFactory__InvalidAddress();
         }
@@ -123,7 +115,7 @@ contract MarketFactory {
     //////////////////////////
     /// External Functions ///
     //////////////////////////
-    
+
     /**
      * @notice Whitelist or remove a market creator
      * @param creator Address of the market creator
@@ -154,12 +146,11 @@ contract MarketFactory {
      * @custom:reverts MarketFactory__InvalidEndTime If endTime is invalid
      * @custom:reverts MarketFactory__DurationTooLong If market duration exceeds limit
      */
-    function createMarket(
-        bytes32 metadataHash,
-        uint256 endTime,
-        uint256 lmsrB,
-        uint256 subsidyAmount
-    ) external payable returns (address market) {
+    function createMarket(bytes32 metadataHash, uint256 endTime, uint256 lmsrB, uint256 subsidyAmount)
+        external
+        payable
+        returns (address market)
+    {
         // Verify creator is whitelisted
         if (!whitelistedCreators[msg.sender]) {
             revert MarketFactory__NotWhitelisted();
@@ -191,13 +182,7 @@ contract MarketFactory {
 
         // Deploy market
         market = address(
-            new Market(
-                address(i_vault),
-                address(i_quoteVerifier),
-                address(i_settlementEngine),
-                endTime,
-                lmsrB
-            )
+            new Market(address(i_vault), address(i_quoteVerifier), address(i_settlementEngine), endTime, lmsrB)
         );
 
         // Track creator and subsidy
@@ -230,7 +215,7 @@ contract MarketFactory {
 
         emit MarketCreated(market, metadataHash, endTime, msg.sender, subsidyAmount);
     }
-       
+
     ////////////////////////
     /// View Functions ///
     //////////////////////////
