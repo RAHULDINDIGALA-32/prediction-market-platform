@@ -10,7 +10,16 @@ contract OracleAdapterTest is Test {
 
     function setUp() public {
         // proposerBond=1 wei, disputeWindow=100, disputerBond=1 wei, resolutionDeadline=100
-        oracle = new OracleAdapter(1 wei, 100, 1 wei, 100, address(this), address(this));
+        oracle = new OracleAdapter(
+            1 wei, // proposerBond
+            100, // disputeWindow
+            1 wei, // disputerBond
+            100, // resolutionDeadline
+            address(this), // settlementEngine
+            payable(address(this)), // oracleBudget
+            payable(address(this)), // treasury
+            address(this) // owner
+        );
     }
 
     function testProposeAndDisputeAndResolve() public {

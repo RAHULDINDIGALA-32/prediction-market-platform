@@ -52,45 +52,71 @@ contract FundFlowIntegrationTest is Test {
     bytes32 constant MARKET_METADATA_HASH = keccak256("test_market_metadata");
 
     function setUp() public {
-        // Deploy contracts in dependency order
-        // Phase 1: Deploy independent contracts
-        vault = new Vault(address(0), address(0)); // Placeholder addresses, fix later
-        quoteVerifier = new QuoteVerifier(owner);
-        oracleBudget = new OracleBudget(address(0), owner); // Oracle address set later
-        platformTreasury = new PlatformTreasury(owner);
+        // Deploy contracts using nonce-based strategy
+        // This avoids circular dependency issues by computing all addresses upfront
 
-        // Phase 2: Deploy OracleAdapter
+        // Nonce sequence for this contract's deployment:
+        // 0: PlatformTreasury
+        // 1: QuoteVerifier
+        // 2: OracleBudget
+        // 3: OracleAdapter
+        // 4: SettlementEngine
+        // 5: Vault
+        // 6: MarketFactory
+
+        // Pre-compute all addresses using nonce strategy
+        uint256 nonce = vm.getNonce(address(this));
+
+        address treasuryAddr = vm.computeCreateAddress(address(this), nonce);
+        address quoteVerifierAddr = vm.computeCreateAddress(address(this), nonce + 1);
+        address oracleBudgetAddr = vm.computeCreateAddress(address(this), nonce + 2);
+        address oracleAddr = vm.computeCreateAddress(address(this), nonce + 3);
+        address settlementEngineAddr = vm.computeCreateAddress(address(this), nonce + 4);
+        address vaultAddr = vm.computeCreateAddress(address(this), nonce + 5);
+        address factoryAddr = vm.computeCreateAddress(address(this), nonce + 6);
+
+        // Deploy in exact nonce order (nonce increments automatically)
+        platformTreasury = new PlatformTreasury(owner);
+        require(address(platformTreasury) == treasuryAddr, "Treasury nonce mismatch");
+
+        quoteVerifier = new QuoteVerifier(owner);
+        require(address(quoteVerifier) == quoteVerifierAddr, "QuoteVerifier nonce mismatch");
+
+        oracleBudget = new OracleBudget(oracleAddr, owner);
+        require(address(oracleBudget) == oracleBudgetAddr, "OracleBudget nonce mismatch");
+
         oracle = new OracleAdapter(
             PROPOSER_BOND,
             7 days, // dispute window
             DISPUTER_BOND,
             3 days, // resolution deadline
-            address(0), // settlement engine (set after creation)
-            payable(address(oracleBudget)),
-            payable(address(platformTreasury)),
+            settlementEngineAddr, // Now we have actual address
+            payable(oracleBudgetAddr),
+            payable(treasuryAddr),
             owner
         );
+        require(address(oracle) == oracleAddr, "OracleAdapter nonce mismatch");
 
-        // Phase 3: Deploy SettlementEngine
         settlement = new SettlementEngine(
-            address(oracle),
-            address(vault),
-            address(0) // marketFactory (set after creation)
+            oracleAddr,
+            vaultAddr,
+            factoryAddr // Now we have actual address
         );
+        require(address(settlement) == settlementEngineAddr, "SettlementEngine nonce mismatch");
 
-        // Phase 4: Deploy MarketFactory
+        vault = new Vault(settlementEngineAddr, factoryAddr);
+        require(address(vault) == vaultAddr, "Vault nonce mismatch");
+
         factory = new MarketFactory(
-            address(vault),
-            address(oracle),
-            address(oracleBudget),
-            address(platformTreasury),
-            address(quoteVerifier),
-            address(settlement),
+            vaultAddr,
+            oracleAddr,
+            payable(oracleBudgetAddr),
+            payable(treasuryAddr),
+            quoteVerifierAddr,
+            settlementEngineAddr,
             owner
         );
-
-        // Update oracle with actual settlement engine address
-        // (would need setter in actual implementation)
+        require(address(factory) == factoryAddr, "MarketFactory nonce mismatch");
 
         // Setup roles
         vm.prank(owner);

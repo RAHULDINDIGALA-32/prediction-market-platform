@@ -57,39 +57,45 @@ contract SettlementEngineUnitTest is Test {
         vm.deal(resolver, 100 ether);
         vm.deal(owner, 100 ether);
 
-        vault = new Vault();
-        quoteVerifier = new QuoteVerifier();
-        oracleBudget = new OracleBudget();
-        platformTreasury = new PlatformTreasury();
+        // Pre-compute all addresses using nonce strategy
+        uint256 nonce = vm.getNonce(address(this));
+        address treasuryAddr = vm.computeCreateAddress(address(this), nonce);
+        address verifierAddr = vm.computeCreateAddress(address(this), nonce + 1);
+        address budgetAddr = vm.computeCreateAddress(address(this), nonce + 2);
+        address oracleAddr = vm.computeCreateAddress(address(this), nonce + 3);
+        address settlementAddr = vm.computeCreateAddress(address(this), nonce + 4);
+        address vaultAddr = vm.computeCreateAddress(address(this), nonce + 5);
+        address factoryAddr = vm.computeCreateAddress(address(this), nonce + 6);
+
+        // Deploy in nonce order
+        platformTreasury = new PlatformTreasury(owner);
+        quoteVerifier = new QuoteVerifier(owner);
+        oracleBudget = new OracleBudget(oracleAddr, owner);
 
         oracle = new OracleAdapter(
-            0.01 ether,
-            0.01 ether,
-            2 days,
-            7 days
-        );
-
-        settlementEngine = new SettlementEngine(
-            address(oracle),
-            address(vault),
-            address(factory)
-        );
-
-        factory = new MarketFactory(
-            address(vault),
-            address(oracle),
-            address(oracleBudget),
-            address(platformTreasury),
-            address(quoteVerifier),
-            address(settlementEngine),
+            0.01 ether, // proposerBond
+            2 days, // disputeWindow
+            0.01 ether, // disputerBond
+            7 days, // resolutionDeadline
+            settlementAddr,
+            payable(budgetAddr),
+            payable(treasuryAddr),
             owner
         );
 
-        oracle.setSettlementEngine(address(settlementEngine));
-        oracle.registerResolver(resolver);
+        settlementEngine = new SettlementEngine(oracleAddr, vaultAddr, factoryAddr);
+
+        vault = new Vault(settlementAddr, factoryAddr);
+
+        factory = new MarketFactory(
+            vaultAddr, oracleAddr, payable(budgetAddr), payable(treasuryAddr), verifierAddr, settlementAddr, owner
+        );
 
         vm.prank(owner);
         factory.setCreatorWhitelist(creator, true);
+
+        vm.prank(owner);
+        oracle.setResolver(resolver, true);
 
         marketEndTime = block.timestamp + 1 days;
     }
@@ -432,14 +438,12 @@ contract SettlementEngineUnitTest is Test {
     //////////////////////////
 
     function _createMarket() private returns (address) {
-        bytes32 metadataHash = keccak256(
-            abi.encode("test", block.timestamp)
-        );
+        bytes32 metadataHash = keccak256(abi.encode("test", block.timestamp));
 
         vm.prank(creator);
-        return factory.createMarket{
-            value: marketCreationFee + subsidyAmount
-        }(metadataHash, marketEndTime, lmsrB, subsidyAmount);
+        return factory.createMarket{value: marketCreationFee + subsidyAmount}(
+            metadataHash, marketEndTime, lmsrB, subsidyAmount
+        );
     }
 
     function _createAndSettleMarket(Outcome expectedOutcome) private returns (address) {
@@ -460,9 +464,7 @@ contract SettlementEngineUnitTest is Test {
         vm.warp(block.timestamp + 2 days + 1);
 
         // First redemption triggers auto-settlement
-        OutcomeToken winningToken = OutcomeToken(
-            marketContract.winningToken(expectedOutcome)
-        );
+        OutcomeToken winningToken = OutcomeToken(marketContract.winningToken(expectedOutcome));
 
         address winningTrader = (expectedOutcome == Outcome.YES) ? trader1 : trader2;
         uint256 redeemAmount = winningToken.balanceOf(winningTrader);
@@ -475,12 +477,7 @@ contract SettlementEngineUnitTest is Test {
         return market;
     }
 
-    function _mintTokens(
-        address market,
-        Outcome outcome,
-        uint256 amount,
-        address user
-    ) private {
+    function _mintTokens(address market, Outcome outcome, uint256 amount, address user) private {
         Market marketContract = Market(market);
         if (outcome == Outcome.YES) {
             marketContract.i_yesToken().mint(user, amount * 2);
