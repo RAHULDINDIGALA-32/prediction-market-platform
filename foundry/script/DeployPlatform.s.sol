@@ -26,7 +26,8 @@ contract DeployPlatform is Script {
         address owner = msg.sender;
 
         // Get current nonce
-        uint256 nonce = vm.getNonce(msg.sender);
+        uint256 nonce = vm.getNonce(msg.sender); // works in local testnet
+        //uint256 nonce = <your_(EOA, Network)_Nonce>; // Works in testnet & mainnet
         console2.log("Deploying from:", owner);
         console2.log("Starting nonce:", nonce);
 
