@@ -330,11 +330,7 @@ contract FundFlowIntegrationTest is Test {
         oracle.proposeOutcome{value: PROPOSER_BOND}(market, Outcome.YES);
 
         vm.warp(block.timestamp + 8 days);
-        vm.prank(address(settlement));
         oracle.finalizeUndisputedOutcome(market);
-
-        // Close redemption window
-        settlement.closeRedemption(market);
 
         // Verify market is in RESOLVED state
         (MarketState state,,,,,,,) = marketContract.getMarketInfo();

@@ -260,7 +260,7 @@ contract MarketStateAndInvariantsTest is Test {
         settlementEngine.redeem(market, redeemAmount);
 
         // Creator withdrawal
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
         vm.warp(resolvedAt + 30 days + 1);
 
         vm.prank(creator);

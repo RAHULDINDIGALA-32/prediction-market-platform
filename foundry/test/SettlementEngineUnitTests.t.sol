@@ -191,7 +191,7 @@ contract SettlementEngineUnitTest is Test {
         Market marketContract = Market(market);
         OutcomeToken yesToken = marketContract.i_yesToken();
 
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
 
         // Move past 30-day window
         vm.warp(resolvedAt + 30 days + 1);
@@ -206,7 +206,7 @@ contract SettlementEngineUnitTest is Test {
         Market marketContract = Market(market);
         OutcomeToken yesToken = marketContract.i_yesToken();
 
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
         uint256 windowEnd = resolvedAt + 30 days;
 
         // At exact boundary: should still work
@@ -221,7 +221,7 @@ contract SettlementEngineUnitTest is Test {
         Market marketContract2 = Market(market2);
         OutcomeToken yesToken2 = marketContract2.i_yesToken();
 
-        uint256 resolvedAt2 = settlementEngine.marketResolvedAt(market2);
+        uint256 resolvedAt2 = oracle.getFinalizationTime(market2);
         vm.warp(resolvedAt2 + 30 days + 1);
 
         vm.prank(trader1);
@@ -269,7 +269,7 @@ contract SettlementEngineUnitTest is Test {
     function testCreatorWithdraw_ValidWithdrawal() public {
         address market = _createAndSettleMarket(Outcome.YES);
 
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
         vm.warp(resolvedAt + 30 days + 1);
 
         uint256 remainingBalance = vault.balanceOf(market);
@@ -287,7 +287,7 @@ contract SettlementEngineUnitTest is Test {
     function testCreatorWithdraw_NotCreator() public {
         address market = _createAndSettleMarket(Outcome.YES);
 
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
         vm.warp(resolvedAt + 30 days + 1);
 
         vm.prank(trader1);
@@ -298,7 +298,7 @@ contract SettlementEngineUnitTest is Test {
     function testCreatorWithdraw_WindowNotClosed() public {
         address market = _createAndSettleMarket(Outcome.YES);
 
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
         // Move to 29 days (not yet 30 days)
         vm.warp(resolvedAt + 29 days);
 
@@ -310,7 +310,7 @@ contract SettlementEngineUnitTest is Test {
     function testCreatorWithdraw_AtWindowBoundary() public {
         address market = _createAndSettleMarket(Outcome.YES);
 
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
         // At exact 30 days
         vm.warp(resolvedAt + 30 days);
 
@@ -326,7 +326,7 @@ contract SettlementEngineUnitTest is Test {
     function testCreatorWithdraw_Idempotent() public {
         address market = _createAndSettleMarket(Outcome.YES);
 
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
         vm.warp(resolvedAt + 30 days + 1);
 
         // First withdrawal
@@ -351,14 +351,14 @@ contract SettlementEngineUnitTest is Test {
     function testCloseRedemption_ValidClose() public {
         address market = _createAndSettleMarket(Outcome.YES);
 
-        assertFalse(settlementEngine.redemptionClosed(market));
+        assertFalse(!settlementEngine.isRedemptionOpen(market));
 
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
         vm.warp(resolvedAt + 30 days + 1);
 
         settlementEngine.closeRedemption(market);
 
-        assertTrue(settlementEngine.redemptionClosed(market));
+        assertTrue(!settlementEngine.isRedemptionOpen(market));
     }
 
     function testCloseRedemption_NotResolved() public {
@@ -371,7 +371,7 @@ contract SettlementEngineUnitTest is Test {
     function testCloseRedemption_WindowNotClosed() public {
         address market = _createAndSettleMarket(Outcome.YES);
 
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
         vm.warp(resolvedAt + 29 days);
 
         vm.expectRevert(SettlementEngine.SettlementEngine__RedemptionWindowNotClosed.selector);
@@ -381,16 +381,16 @@ contract SettlementEngineUnitTest is Test {
     function testCloseRedemption_Idempotent() public {
         address market = _createAndSettleMarket(Outcome.YES);
 
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
         vm.warp(resolvedAt + 30 days + 1);
 
         // First close
         settlementEngine.closeRedemption(market);
-        assertTrue(settlementEngine.redemptionClosed(market));
+        assertTrue(!settlementEngine.isRedemptionOpen(market));
 
         // Second close (should be no-op)
         settlementEngine.closeRedemption(market);
-        assertTrue(settlementEngine.redemptionClosed(market));
+        assertTrue(!settlementEngine.isRedemptionOpen(market));
     }
 
     //////////////////////////
@@ -400,7 +400,7 @@ contract SettlementEngineUnitTest is Test {
     function testIsRedemptionOpen() public {
         address market = _createAndSettleMarket(Outcome.YES);
 
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
 
         // Within 30 days: open
         vm.warp(resolvedAt + 15 days);
@@ -418,19 +418,19 @@ contract SettlementEngineUnitTest is Test {
     function testIsRedemptionClosed() public {
         address market = _createAndSettleMarket(Outcome.YES);
 
-        uint256 resolvedAt = settlementEngine.marketResolvedAt(market);
+        uint256 resolvedAt = oracle.getFinalizationTime(market);
 
         // Before 30 days: not closed
         vm.warp(resolvedAt + 15 days);
-        assertFalse(settlementEngine.isRedemptionClosed(market));
+        assertFalse(!settlementEngine.isRedemptionOpen(market));
 
         // After 30 days: closed
         vm.warp(resolvedAt + 31 days);
-        assertTrue(settlementEngine.isRedemptionClosed(market));
+        assertTrue(!settlementEngine.isRedemptionOpen(market));
 
         // Before resolution: not closed
         address market2 = _createMarket();
-        assertFalse(settlementEngine.isRedemptionClosed(market2));
+        assertFalse(!settlementEngine.isRedemptionOpen(market2));
     }
 
     //////////////////////////

@@ -157,14 +157,14 @@ contract MarketFlowTest is Test {
         vm.startPrank(trader1);
 
         // Before redeem, market not yet resolved
-        assertEq(settlementEngine.marketResolvedAt(market), 0);
+        assertEq(oracle.getFinalizationTime(market), 0);
 
         // Redeem triggers _ensureResolved() → _ensureOracleFinalized() → _tryFinalizeOracle()
         uint256 redeemAmount = yesToken.balanceOf(trader1);
         settlementEngine.redeem(market, redeemAmount);
 
         // After redeem, market is resolved
-        assertGt(settlementEngine.marketResolvedAt(market), 0);
+        assertGt(oracle.getFinalizationTime(market), 0);
         assert(marketContract.resolvedOutcome() == Outcome.YES);
         vm.stopPrank();
 
@@ -172,7 +172,7 @@ contract MarketFlowTest is Test {
         assertEq(yesToken.balanceOf(trader1), 0);
 
         // Step 7: Creator withdrawal (after 30 day window)
-        vm.warp(settlementEngine.marketResolvedAt(market) + 30 days + 1);
+        vm.warp(oracle.getFinalizationTime(market) + 30 days + 1);
 
         uint256 creatorWithdrawAmount = vault.balanceOf(market);
         vm.prank(creator);
@@ -182,7 +182,7 @@ contract MarketFlowTest is Test {
         assertEq(vault.balanceOf(market), 0);
 
         // Verify market marked as settled
-        assertTrue(settlementEngine.redemptionClosed(market));
+        assertTrue(!settlementEngine.isRedemptionOpen(market));
     }
 
     function testCompleteMarketLifecycle_DisputedFlow() public {
@@ -222,7 +222,7 @@ contract MarketFlowTest is Test {
         if (redeemAmount > 0) {
             settlementEngine.redeem(market, redeemAmount);
             // Verify settled correctly
-            assertGt(settlementEngine.marketResolvedAt(market), 0);
+            assertGt(oracle.getFinalizationTime(market), 0);
             assert(marketContract.resolvedOutcome() == Outcome.YES);
         }
     }
@@ -243,7 +243,7 @@ contract MarketFlowTest is Test {
 
         // BEFORE redemption: oracle not finalized
         assertFalse(oracle.isFinalized(market));
-        assertEq(settlementEngine.marketResolvedAt(market), 0);
+        assertEq(oracle.getFinalizationTime(market), 0);
 
         // Redemption triggers automatic finalization chain
         Market marketContract = Market(market);
@@ -255,7 +255,7 @@ contract MarketFlowTest is Test {
 
         // AFTER redemption: oracle is finalized AND market is resolved
         assertTrue(oracle.isFinalized(market));
-        assertGt(settlementEngine.marketResolvedAt(market), 0);
+        assertGt(oracle.getFinalizationTime(market), 0);
         assert(marketContract.resolvedOutcome() == Outcome.NO);
     }
 
@@ -275,7 +275,7 @@ contract MarketFlowTest is Test {
         // First redemption triggers resolution
         vm.prank(trader1);
         settlementEngine.redeem(market, halfBalance);
-        uint256 resolveTime1 = settlementEngine.marketResolvedAt(market);
+        uint256 resolveTime1 = oracle.getFinalizationTime(market);
 
         // Wait a bit
         vm.warp(block.timestamp + 100);
@@ -283,7 +283,7 @@ contract MarketFlowTest is Test {
         // Second redemption should not change resolution time (idempotent)
         vm.prank(trader1);
         settlementEngine.redeem(market, halfBalance);
-        uint256 resolveTime2 = settlementEngine.marketResolvedAt(market);
+        uint256 resolveTime2 = oracle.getFinalizationTime(market);
 
         assert(resolveTime1 == resolveTime2);
     }
@@ -304,7 +304,7 @@ contract MarketFlowTest is Test {
         settlementEngine.redeem(market, redeemAmount);
 
         // Move past 30-day window
-        vm.warp(settlementEngine.marketResolvedAt(market) + 30 days + 1);
+        vm.warp(oracle.getFinalizationTime(market) + 30 days + 1);
 
         // Attempt redemption after window should fail
         vm.prank(trader2);
