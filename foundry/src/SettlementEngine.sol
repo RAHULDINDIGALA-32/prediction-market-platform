@@ -25,14 +25,11 @@ contract SettlementEngine is ReentrancyGuard {
     MarketFactory public immutable i_factory;
     uint256 public constant REDEMPTION_PERIOD = 30 days;
 
-    mapping(address market => bool isRedemptionclosed) public redemptionClosed;
-    mapping(address market => uint256 resolvedAt) public marketResolvedAt;
     mapping(address market => mapping(address user => uint256 redeemedAmount)) public redeemed;
 
     //////////////////////////
     /// EVENTS ///
     //////////////////////////
-    event MarketResolved(address indexed market, Outcome indexed outcome);
     event RedemptionClosed(address indexed market, uint256 indexed closedAt);
     event CreatorWithdrawn(address indexed market, address indexed creator, uint256 indexed amount);
     event Redeemed(address indexed market, address indexed user, uint256 indexed winningTokenAmount, uint256 ethPaid);
@@ -86,27 +83,7 @@ contract SettlementEngine is ReentrancyGuard {
      * @custom:reverts SettlementEngine__RedemptionWindowNotClosed If redemption window not yet closed
      */
     function closeRedemption(address market) external {
-        _ensureResolved(market);
-
-        if (marketResolvedAt[market] == 0) {
-            revert SettlementEngine__MarketNotResolved();
-        }
-
-        if (redemptionClosed[market]) {
-            return;
-        }
-
-        uint256 resolvedAt = marketResolvedAt[market];
-        if (block.timestamp < resolvedAt + REDEMPTION_PERIOD) {
-            revert SettlementEngine__RedemptionWindowNotClosed();
-        }
-
-        redemptionClosed[market] = true;
-
-        Market marketContract = Market(market);
-        marketContract.onSettled();
-
-        emit RedemptionClosed(market, block.timestamp);
+        _ensureRedemptionClosed(market);
     }
 
     /**
@@ -118,12 +95,8 @@ contract SettlementEngine is ReentrancyGuard {
      * @custom:reverts SettlementEngine__UnauthorizedCreator If caller is not the creator
      */
     function creatorWithdraw(address market) external nonReentrant {
-        // Lazy resolution: resolve market if not yet done
-        _ensureResolved(market);
-
-        if (!redemptionClosed[market]) {
-            revert SettlementEngine__RedemptionWindowNotClosed();
-        }
+        // Lazy settlement: settle market if not yet done
+        _ensureRedemptionClosed(market);
 
         address creator = i_factory.marketCreator(market);
         if (msg.sender != creator) {
@@ -153,9 +126,9 @@ contract SettlementEngine is ReentrancyGuard {
      */
     function redeem(address market, uint256 amount) external nonReentrant {
         // Lazy resolution: resolve market if not yet done
-        _ensureResolved(market);
+        _ensureOracleResolved(market);
 
-        uint256 resolvedAt = marketResolvedAt[market];
+        uint256 resolvedAt = i_oracle.getFinalizationTime(market);
         if (block.timestamp >= resolvedAt + REDEMPTION_PERIOD) {
             revert SettlementEngine__RedemptionWindowClosed();
         }
@@ -213,36 +186,7 @@ contract SettlementEngine is ReentrancyGuard {
      * @param market The market address
      * @custom:reverts SettlementEngine__OracleOutcomeNotResolved If oracle can't be finalized
      */
-    function _ensureResolved(address market) internal {
-        if (marketResolvedAt[market] != 0) {
-            return;
-        }
-
-        // This handles both undisputed (auto-finalize) and disputed (revert) cases
-        _ensureOracleFinalized(market);
-
-        // At this point, oracle is guaranteed finalized)
-        marketResolvedAt[market] = block.timestamp;
-
-        Outcome outcome = i_oracle.getFinalOutcome(market);
-
-        // Notify Market contract via callback (passive pattern)
-        Market(market).onResolved(outcome);
-
-        emit MarketResolved(market, outcome);
-    }
-
-    /**
-     * @notice Ensure oracle has finalized the outcome
-     * @dev Implements lazy oracle finalization pattern:
-     * - If already finalized: return (idempotent)
-     * - If undisputed and window closed: finalize automatically
-     * - If disputed: revert (let resolver handle it)
-     * - If window not closed: revert (too early)
-     * @param market The market address
-     * @custom:reverts SettlementEngine__OracleOutcomeNotResolved If oracle can't be finalized
-     */
-    function _ensureOracleFinalized(address market) internal {
+    function _ensureOracleResolved(address market) internal {
         if (i_oracle.isFinalized(market)) {
             return;
         }
@@ -271,14 +215,8 @@ contract SettlementEngine is ReentrancyGuard {
      * @param market The market address
      */
     function _tryFinalizeOracle(address market) internal {
-        bool isAlreadyFinalized = i_oracle.isFinalized(market);
         bool isDisputed = i_oracle.isDisputed(market);
         uint256 proposedAt = i_oracle.getProposalTime(market);
-
-        // Already finalized: nothing to do (idempotent)
-        if (isAlreadyFinalized) {
-            return;
-        }
 
         if (isDisputed) {
             return;
@@ -294,22 +232,40 @@ contract SettlementEngine is ReentrancyGuard {
     }
 
     /**
+     * @notice Ensure redemption window is closed for market
+     * @param market The market address
+     * @custom:reverts SettlementEngine__MarketNotResolved If market not yet resolved
+     * @custom:reverts SettlementEngine__RedemptionWindowNotClosed If redemption window not yet closed
+     */
+    function _ensureRedemptionClosed(address market) internal {
+        Market marketContract = Market(market);
+
+        if (marketContract.state() == MarketState.SETTLED) {
+            return;
+        }
+
+        uint256 resolvedAt = i_oracle.getFinalizationTime(market);
+
+        if (resolvedAt == 0) {
+            revert SettlementEngine__MarketNotResolved();
+        }
+        if (block.timestamp < resolvedAt + REDEMPTION_PERIOD) {
+            revert SettlementEngine__RedemptionWindowNotClosed();
+        }
+
+        emit RedemptionClosed(market, block.timestamp);
+
+        // move the market state from RESOLVED -> SETTLED
+        marketContract.onSettled();
+    }
+
+    /**
      * @notice Check if redemption window is still open for market
      * @param market The market address
      * @return bool True if within 30 days of resolution
      */
     function isRedemptionOpen(address market) public view returns (bool) {
-        uint256 resolved = marketResolvedAt[market];
-        return resolved != 0 && block.timestamp < resolved + REDEMPTION_PERIOD;
-    }
-
-    /**
-     * @notice Check if redemption window has closed
-     * @param market The market address
-     * @return bool True if past 30 days or not yet resolved
-     */
-    function isRedemptionClosed(address market) public view returns (bool) {
-        uint256 resolved = marketResolvedAt[market];
-        return resolved != 0 && block.timestamp >= resolved + REDEMPTION_PERIOD;
+        uint256 resolvedAt = i_oracle.getFinalizationTime(market);
+        return resolvedAt != 0 && block.timestamp < resolvedAt + REDEMPTION_PERIOD;
     }
 }

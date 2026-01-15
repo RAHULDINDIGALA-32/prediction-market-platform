@@ -182,7 +182,14 @@ contract MarketFactory {
 
         // Deploy market
         market = address(
-            new Market(address(i_vault), address(i_quoteVerifier), address(i_settlementEngine), endTime, lmsrB)
+            new Market(
+                address(i_vault),
+                address(i_quoteVerifier),
+                address(i_oracle),
+                address(i_settlementEngine),
+                endTime,
+                lmsrB
+            )
         );
 
         // Track creator and subsidy

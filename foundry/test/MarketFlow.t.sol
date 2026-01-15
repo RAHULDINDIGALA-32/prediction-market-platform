@@ -522,7 +522,9 @@ contract MarketFlowTest is Test {
 
         bytes memory signature = _signQuote(quote);
 
+        vm.startPrank(trader);
         marketContract.executeTrade{value: ethAmount}(quote, signature, ethAmount, 0);
+        vm.stopPrank();
     }
 
     function _signQuote(TradeQuote memory quote) private pure returns (bytes memory) {

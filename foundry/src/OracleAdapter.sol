@@ -25,6 +25,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
         address disputer;
         bool disputed;
         bool finalized;
+        uint256 finalizedAt;
     }
 
     //////////////////////////
@@ -255,6 +256,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
 
         request.proposedOutcome = finalOutcome;
         request.finalized = true;
+        request.finalizedAt = block.timestamp;
 
         address winner;
         uint256 loserBond;
@@ -319,18 +321,22 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
         }
 
         emit OutcomeFinalized(market, finalOutcome);
+
+        // move the market state from CLOSED -> RESOLVED
+        Market marketContract = Market(market);
+        marketContract.onResolved(request.proposedOutcome);
     }
 
     /**
      * @notice Finalize an undisputed outcome after dispute window closes
-     * @dev Only callable by SettlementEngine. Pulls bounty from OracleBudget.
+     * @dev Anyone can call. Pulls bounty from OracleBudget.
      *      Fixed bounty incentivizes fast, truthful oracle proposals.
      * @param market The market to finalize
      * @custom:reverts OracleAdapter__OutcomeNotProposed If no outcome proposed
      * @custom:reverts OracleAdapter__Disputed If outcome was disputed
      * @custom:reverts OracleAdapter__DisputeWindowNotClosed If dispute window hasn't closed
      */
-    function finalizeUndisputedOutcome(address market) external nonReentrant onlySettlementEngine {
+    function finalizeUndisputedOutcome(address market) external nonReentrant {
         OracleRequest storage request = requests[market];
         if (request.proposedAt == 0) {
             revert OracleAdapter__OutcomeNotProposed();
@@ -346,6 +352,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
         }
 
         request.finalized = true;
+        request.finalizedAt = block.timestamp;
 
         // Return proposer bond + pay fixed bounty from OracleBudget
         (bool bondSuccess,) = (request.proposer).call{value: i_proposerBond}("");
@@ -358,6 +365,10 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
 
         emit BountyPaid(market, request.proposer, PROPOSER_BOUNTY);
         emit OutcomeFinalized(market, request.proposedOutcome);
+
+        // move the market state from CLOSED -> RESOLVED
+        Market marketContract = Market(market);
+        marketContract.onResolved(request.proposedOutcome);
     }
 
     //////////////////////////
@@ -383,6 +394,15 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
             revert OracleAdapter__OutcomeNotFinalized();
         }
         return requests[market].proposedOutcome;
+    }
+
+    /**
+     * @notice Get the finalization timestamp for a market
+     * @param market The market address
+     * @return uint256 Timestamp when outcome was finalized (0 if not finalized)
+     */
+    function getFinalizationTime(address market) external view returns (uint256) {
+        return requests[market].finalizedAt;
     }
 
     /**

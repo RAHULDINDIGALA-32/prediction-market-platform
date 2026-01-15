@@ -25,6 +25,7 @@ contract Market is ReentrancyGuard {
     OutcomeToken public immutable i_yesToken;
     OutcomeToken public immutable i_noToken;
 
+    address public immutable i_oracle;
     address public immutable i_settlementEngine;
 
     MarketState public state;
@@ -58,13 +59,22 @@ contract Market is ReentrancyGuard {
     error Market__InvalidAddress();
     error Market__SlippageExceeded();
     error Market__OutcomeConflict();
+    error Market__UnauthorizedNotOracle();
+    error Market__UnauthorizedNotSettlementEngine();
 
     //////////////////////////
     /// MODIFIERS //////
     //////////////////////////
+    modifier onlyOracle() {
+        if (msg.sender != i_oracle) {
+            revert Market__UnauthorizedNotOracle();
+        }
+        _;
+    }
+
     modifier onlySettlementEngine() {
         if (msg.sender != i_settlementEngine) {
-            revert Market__Unauthorized();
+            revert Market__UnauthorizedNotSettlementEngine();
         }
         _;
     }
@@ -96,13 +106,25 @@ contract Market is ReentrancyGuard {
      * @param _endTime Unix timestamp when the market expires
      * @param _lmsrB LMSR liquidity parameter (b value)
      */
-    constructor(address _vault, address _quoteVerifier, address _settlementEngine, uint256 _endTime, uint256 _lmsrB) {
-        if (_vault == address(0) || _quoteVerifier == address(0) || _settlementEngine == address(0)) {
+    constructor(
+        address _vault,
+        address _quoteVerifier,
+        address _oracle,
+        address _settlementEngine,
+        uint256 _endTime,
+        uint256 _lmsrB
+    ) {
+        if (
+            _vault == address(0) || _quoteVerifier == address(0) || _oracle == address(0)
+                || _settlementEngine == address(0)
+        ) {
             revert Market__InvalidAddress();
         }
         if (_lmsrB == 0) {
             revert Market__InvalidAddress(); // Using same error for clarity
         }
+
+        i_oracle = _oracle;
         i_settlementEngine = _settlementEngine;
         i_vault = Vault(_vault);
         i_quoteVerifier = QuoteVerifier(_quoteVerifier);
@@ -222,7 +244,7 @@ contract Market is ReentrancyGuard {
      * @param outcome The final oracle-determined outcome (YES or NO)
      * @custom:reverts Market__Unauthorized If caller is not SettlementEngine
      */
-    function onResolved(Outcome outcome) external onlySettlementEngine {
+    function onResolved(Outcome outcome) external onlyOracle {
         if (state != MarketState.CLOSED) {
             revert Market__MarketNotClosed();
         }
