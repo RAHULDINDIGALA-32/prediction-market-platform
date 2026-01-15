@@ -139,7 +139,7 @@ contract MarketFlowTest is Test {
         vm.warp(marketEndTime + 1);
 
         // Verify market is now closed (checked when trading)
-        vm.expectRevert(Market.Market__MarketExpired.selector);
+        vm.expectRevert(Market.Market__MarketNotOpen.selector);
         _attemptTrade(market, trader1, Outcome.YES, 0.1 ether);
 
         // Step 4: Oracle Proposal

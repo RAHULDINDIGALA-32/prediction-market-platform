@@ -30,7 +30,7 @@ contract Market is ReentrancyGuard {
     MarketState public state;
     uint256 public immutable i_endTime;
     uint256 public immutable i_lmsrB; // LMSR liquidity parameter for pricing
-    Outcome public resolvedOutcome =  Outcome.INVALID; // YES, NO, or INVALID (default)
+    Outcome public resolvedOutcome = Outcome.INVALID; // YES, NO, or INVALID (default)
 
     mapping(bytes32 quoteHash => bool isUsed) public usedQuoteHashes;
 
@@ -38,11 +38,7 @@ contract Market is ReentrancyGuard {
     /// EVENTS //////
     //////////////////////////
     event TradeExecuted(
-        address indexed trader,
-        Outcome indexed outcome,
-        uint256 indexed amount,
-        uint256 cost,
-        bytes32 quoteHash
+        address indexed trader, Outcome indexed outcome, uint256 indexed amount, uint256 cost, bytes32 quoteHash
     );
 
     event MarketClosed(uint256 indexed timestamp);
@@ -55,7 +51,6 @@ contract Market is ReentrancyGuard {
     error Market__MarketNotOpen();
     error Market__MarketNotResolved();
     error Market__InvalidETHAmount();
-    error Market__MarketExpired();
     error Market__MarketNotExpired();
     error Market__QuoteAlreadyUsed();
     error Market__Unauthorized();
@@ -67,7 +62,7 @@ contract Market is ReentrancyGuard {
     //////////////////////////
     /// MODIFIERS //////
     //////////////////////////
-      modifier onlySettlementEngine() {
+    modifier onlySettlementEngine() {
         if (msg.sender != i_settlementEngine) {
             revert Market__Unauthorized();
         }
@@ -76,19 +71,19 @@ contract Market is ReentrancyGuard {
 
     modifier onlyOpen() {
         _ensureClosedIfExpired();
-        
+
         if (state != MarketState.OPEN) {
             revert Market__MarketNotOpen();
         }
         _;
     }
 
-    modifier notExpired() {
-        if (block.timestamp >= i_endTime) {
-            revert Market__MarketExpired();
-        }
-        _;
-    }
+    // modifier notExpired() {
+    //     if (block.timestamp >= i_endTime) {
+    //         revert Market__MarketExpired();
+    //     }
+    //     _;
+    // }
 
     //////////////////////////
     /// FUNCTIONS //////
@@ -101,13 +96,7 @@ contract Market is ReentrancyGuard {
      * @param _endTime Unix timestamp when the market expires
      * @param _lmsrB LMSR liquidity parameter (b value)
      */
-    constructor(
-        address _vault,
-        address _quoteVerifier,
-        address _settlementEngine,
-        uint256 _endTime,
-        uint256 _lmsrB
-    ) {
+    constructor(address _vault, address _quoteVerifier, address _settlementEngine, uint256 _endTime, uint256 _lmsrB) {
         if (_vault == address(0) || _quoteVerifier == address(0) || _settlementEngine == address(0)) {
             revert Market__InvalidAddress();
         }
@@ -144,9 +133,7 @@ contract Market is ReentrancyGuard {
         payable
         nonReentrant
         onlyOpen
-        notExpired
     {
-
         // Caller must be the intended trader
         if (msg.sender != quote.trader) {
             revert Market__Unauthorized();
@@ -214,6 +201,10 @@ contract Market is ReentrancyGuard {
      * @custom:reverts Market__MarketNotOpen If market is not in OPEN state
      */
     function closeMarket() external {
+        if (state == MarketState.CLOSED) {
+            return;
+        }
+
         if (block.timestamp < i_endTime) {
             revert Market__MarketNotExpired();
         }
@@ -225,8 +216,6 @@ contract Market is ReentrancyGuard {
         emit MarketClosed(block.timestamp);
     }
 
- 
-
     /**
      * @notice Resolve the market with a final outcome (callback from SettlementEngine)
      * @dev Only callable by SettlementEngine. Passive state receiver pattern.
@@ -234,14 +223,14 @@ contract Market is ReentrancyGuard {
      * @custom:reverts Market__Unauthorized If caller is not SettlementEngine
      */
     function onResolved(Outcome outcome) external onlySettlementEngine {
-        if(state != MarketState.OPEN) {
-            revert Market__MarketNotOpen();
+        if (state != MarketState.CLOSED) {
+            revert Market__MarketNotClosed();
         }
 
         if (resolvedOutcome != Outcome.INVALID && resolvedOutcome != outcome) {
             revert Market__OutcomeConflict();
         }
-        
+
         resolvedOutcome = outcome;
         state = MarketState.RESOLVED;
         emit MarketResolved(outcome);
@@ -260,7 +249,6 @@ contract Market is ReentrancyGuard {
         emit MarketSettled(block.timestamp);
     }
 
-  
     //////////////////////////
     /// Internal Functions ///
     //////////////////////////

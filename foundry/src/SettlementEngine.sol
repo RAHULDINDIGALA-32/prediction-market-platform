@@ -86,6 +86,8 @@ contract SettlementEngine is ReentrancyGuard {
      * @custom:reverts SettlementEngine__RedemptionWindowNotClosed If redemption window not yet closed
      */
     function closeRedemption(address market) external {
+        _ensureResolved(market);
+
         if (marketResolvedAt[market] == 0) {
             revert SettlementEngine__MarketNotResolved();
         }
@@ -288,7 +290,7 @@ contract SettlementEngine is ReentrancyGuard {
             return;
         }
 
-        i_oracle.finalize(market);
+        i_oracle.finalizeUndisputedOutcome(market);
     }
 
     /**

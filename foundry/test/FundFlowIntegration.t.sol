@@ -192,7 +192,6 @@ contract FundFlowIntegrationTest is Test {
      * - No platform fee for undisputed case
      */
     function test_UndisputedResolution() public {
-        // Setup: Create market and expire it
         vm.prank(creator);
         address market = factory.createMarket{value: SUBSIDY + CREATION_FEE_TOTAL}(
             MARKET_METADATA_HASH, block.timestamp + 30 days, LMSR_B, SUBSIDY
@@ -211,14 +210,14 @@ contract FundFlowIntegrationTest is Test {
 
         // Settlement engine finalizes
         vm.prank(address(settlement));
-        oracle.finalize(market);
+        oracle.finalizeUndisputedOutcome(market);
 
         // Verify proposer received: bond + bounty
         uint256 proposerBalanceAfter = proposer.balance;
         uint256 received = proposerBalanceAfter - proposerBalanceBefore;
 
         // Should receive bond + bounty paid from OracleBudget
-        assertEq(received, PROPOSER_BOND); // Direct bond return
+        assertEq(received, ORACLE_BOUNTY); // Direct bond return
 
         // Verify bounty was marked as claimed in OracleBudget
         assertTrue(oracleBudget.isBountyClaimed(market));
@@ -332,7 +331,7 @@ contract FundFlowIntegrationTest is Test {
 
         vm.warp(block.timestamp + 8 days);
         vm.prank(address(settlement));
-        oracle.finalize(market);
+        oracle.finalizeUndisputedOutcome(market);
 
         // Close redemption window
         settlement.closeRedemption(market);
@@ -383,7 +382,7 @@ contract FundFlowIntegrationTest is Test {
 
         vm.warp(block.timestamp + 8 days);
         vm.prank(address(settlement));
-        oracle.finalize(market);
+        oracle.finalizeUndisputedOutcome(market);
 
         // Attempt withdrawal before window closes (should fail)
         vm.prank(creator);
@@ -426,7 +425,7 @@ contract FundFlowIntegrationTest is Test {
 
         vm.warp(block.timestamp + 8 days);
         vm.prank(address(settlement));
-        oracle.finalize(market);
+        oracle.finalizeUndisputedOutcome(market);
 
         // Skip to after window
         vm.warp(block.timestamp + 31 days);
@@ -471,7 +470,7 @@ contract FundFlowIntegrationTest is Test {
         // Finalize oracle
         vm.warp(block.timestamp + 8 days);
         vm.prank(address(settlement));
-        oracle.finalize(market);
+        oracle.finalizeUndisputedOutcome(market);
 
         // Market moves to RESOLVED after oracle finalization
         (state,,,,,,,) = marketContract.getMarketInfo();

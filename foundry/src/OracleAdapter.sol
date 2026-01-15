@@ -171,7 +171,8 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
         if (outcome != Outcome.YES && outcome != Outcome.NO) {
             revert OracleAdapter__InvalidOutcome();
         }
-
+        // Lazy Close: close market if not yet close even expired
+        marketContract.closeMarket();
         OracleRequest storage request = requests[market];
 
         if (request.proposedAt != 0) {
@@ -329,7 +330,7 @@ contract OracleAdapter is ReentrancyGuard, Ownable {
      * @custom:reverts OracleAdapter__Disputed If outcome was disputed
      * @custom:reverts OracleAdapter__DisputeWindowNotClosed If dispute window hasn't closed
      */
-    function finalize(address market) external nonReentrant onlySettlementEngine {
+    function finalizeUndisputedOutcome(address market) external nonReentrant onlySettlementEngine {
         OracleRequest storage request = requests[market];
         if (request.proposedAt == 0) {
             revert OracleAdapter__OutcomeNotProposed();

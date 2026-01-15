@@ -104,7 +104,7 @@ contract OracleBountyTest is Test {
         // Finalize - proposer should get bond + bounty (0.02 ether)
         uint256 expectedBounty = 0.02 ether; // PROPOSER_BOUNTY constant
         vm.prank(owner);
-        oracle.finalize(address(market));
+        oracle.finalizeUndisputedOutcome(address(market));
 
         // Proposer should receive bond back
         assertEq(proposer.balance, proposerBalanceBefore - PROPOSER_BOND + PROPOSER_BOND);

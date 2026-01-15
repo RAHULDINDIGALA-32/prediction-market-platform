@@ -113,7 +113,7 @@ contract MarketStateAndInvariantsTest is Test {
         vm.warp(marketEndTime);
 
         // Attempting to trade should fail
-        vm.expectRevert(Market.Market__MarketExpired.selector);
+        vm.expectRevert(Market.Market__MarketNotOpen.selector);
         marketContract.executeTrade( /* args */
             _dummyQuote(),
             _dummySignature(),
@@ -148,7 +148,7 @@ contract MarketStateAndInvariantsTest is Test {
 
         // OPEN → can only go to CLOSED (via time)
         vm.warp(marketEndTime - 1);
-        vm.expectRevert(Market.Market__MarketExpired.selector);
+        vm.expectRevert(Market.Market__MarketNotOpen.selector);
         // Try to resolve without closing first
 
         // Proper flow: OPEN → CLOSED (via time) → RESOLVED (via oracle)
