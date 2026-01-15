@@ -333,7 +333,7 @@ contract FundFlowIntegrationTest is Test {
         oracle.finalizeUndisputedOutcome(market);
 
         // Verify market is in RESOLVED state
-        (MarketState state,,,,,,,) = marketContract.getMarketInfo();
+        (MarketState state,,,,,,) = marketContract.getMarketInfo();
         assertEq(uint256(state), uint256(MarketState.RESOLVED));
 
         // Attempt redemption within window (should succeed if user has tokens)
@@ -449,14 +449,14 @@ contract FundFlowIntegrationTest is Test {
         );
 
         Market marketContract = Market(market);
-        (MarketState state,,,,,,,) = marketContract.getMarketInfo();
+        (MarketState state,,,,,,) = marketContract.getMarketInfo();
         assertEq(uint256(state), uint256(MarketState.OPEN));
 
         // Expire and close market
         vm.warp(block.timestamp + 31 days);
         marketContract.closeMarket();
 
-        (state,,,,,,,) = marketContract.getMarketInfo();
+        (state,,,,,,) = marketContract.getMarketInfo();
         assertEq(uint256(state), uint256(MarketState.CLOSED));
 
         // Propose outcome
@@ -469,7 +469,7 @@ contract FundFlowIntegrationTest is Test {
         oracle.finalizeUndisputedOutcome(market);
 
         // Market moves to RESOLVED after oracle finalization
-        (state,,,,,,,) = marketContract.getMarketInfo();
+        (state,,,,,,) = marketContract.getMarketInfo();
         assertEq(uint256(state), uint256(MarketState.RESOLVED));
     }
 

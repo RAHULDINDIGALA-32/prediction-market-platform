@@ -1,6 +1,9 @@
-// Makefile for common project tasks
 
-.PHONY: forge-test forge-clean forge-build forge-deploy forge-coverage dapp-install dapp-dev prisma-migrate backfill-nonces integration-test
+-include .env
+
+.PHONY: all build test fclean deploy-local deploy-sepolia verify-contracts
+
+all: build test
 
 test:
 	forge test -v
@@ -18,34 +21,35 @@ coverage:
 	forge coverage --report lcov
 
 deploy-local:
-	@echo "Deploying to localhost..."
-	forge script script/DeployPlatform.s.sol --broadcast --rpc-url http://localhost:8545 -vv
+	@echo "Deploying to localhost."
+	forge script script/DeployPlatform.s.sol \
+	--rpc-url http://localhost:8545 -vv \
+	--broadcast
 
-deploy-testnet:
-	@echo "Deploying to testnet. Usage: make forge-deploy-testnet RPC_URL=<url> PRIVATE_KEY=<key>"
-	@if [ -z "$(RPC_URL)" ]; then echo "Error: RPC_URL not set"; exit 1; fi
-	@if [ -z "$(PRIVATE_KEY)" ]; then echo "Error: PRIVATE_KEY not set"; exit 1; fi
-	forge script script/DeployPlatform.s.sol --broadcast --rpc-url $(RPC_URL) --private-key $(PRIVATE_KEY) -vv
+deploy-sepolia:
+	@echo "Deploying to Sepolia testnet..."
+	forge script script/DeployPlatform.s.sol \
+	--rpc-url $(SEPOLIA_RPC_URL) \
+	--account defaultAcc \
+	--broadcast \
+	--etherscan-api-key $(ETHERSCAN_API_KEY) \
+	--verify
 
-deploy-mainnet:
-	@echo "WARNING: Deploying to mainnet!"
-	@echo "Usage: make forge-deploy-mainnet RPC_URL=<url> PRIVATE_KEY=<key>"
-	@if [ -z "$(RPC_URL)" ]; then echo "Error: RPC_URL not set"; exit 1; fi
-	@if [ -z "$(PRIVATE_KEY)" ]; then echo "Error: PRIVATE_KEY not set"; exit 1; fi
-	forge script script/DeployPlatform.s.sol --broadcast --rpc-url $(RPC_URL) --private-key $(PRIVATE_KEY) -vv
+verify-contracts:
+	@echo "verifying Contracts..."
+	forge verify-contract $(MARKET_FACTORY_ADDRESS) src/MarketFactory.sol:MarketFactory --etherscan-api-key $(ETHERSCAN_API_KEY) \
+	--rpc-url $(SEPOLIA_RPC_URL) --show-standard-json-input > marketFactory.json 
+	forge verify-contract $(ORACLE_ADDRESS) src/OracleAdapter.sol:OracleAdapter --etherscan-api-key $(ETHERSCAN_API_KEY) \
+	--rpc-url $(SEPOLIA_RPC_URL) --show-standard-json-input > oracle.json
+	forge verify-contract $(ORACLE_BUDGET_ADDRESS) src/OracleBudget.sol:OracleBudget --etherscan-api-key $(ETHERSCAN_API_KEY) \
+	--rpc-url $(SEPOLIA_RPC_URL) --show-standard-json-input > oracleBudget.json
+	forge verify-contract $(SETTLEMENT_ENGINE_ADDRESS) src/SettlementEngine.sol:SettlementEngine --etherscan-api-key \
+	$(ETHERSCAN_API_KEY) --rpc-url $(SEPOLIA_RPC_URL) --show-standard-json-input > settlementEngine.json
+	forge verify-contract $(VAULT_ADDRESS) src/Vault.sol:Vault --etherscan-api-key $(ETHERSCAN_API_KEY) \
+	--rpc-url $(SEPOLIA_RPC_URL) --show-standard-json-input > vault.json
+	forge verify-contract $(PLATFORM_TREASURY_ADDRESS) src/PlatformTreasury.sol:PlatformTreasury --etherscan-api-key \
+	$(ETHERSCAN_API_KEY) --rpc-url $(SEPOLIA_RPC_URL) --show-standard-json-input > platformTreasury.json
+	forge verify-contract $(QUOTE_VERIFIER_ADDRESS) src/QuoteVerifier.sol:QuoteVerifier --etherscan-api-key $(ETHERSCAN_API_KEY) \
+	--rpc-url $(SEPOLIA_RPC_URL) --show-standard-json-input > quoteVerifier.json
+	  
 
-dapp-install:
-	cd dapp && npm ci
-
-dapp-dev:
-	cd dapp && npm run dev
-
-prisma-migrate:
-	cd dapp && npx prisma migrate dev --name add-trader-nonce
-
-backfill-nonces:
-	cd dapp && npm run backfill:nonces
-
-integration-test:
-	# Start dev server first then run this
-	node dapp/scripts/integrationTest.js

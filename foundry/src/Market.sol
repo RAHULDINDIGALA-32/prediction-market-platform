@@ -302,7 +302,7 @@ contract Market is ReentrancyGuard {
      * @notice Get the payout rate per token
      * @return uint256 The amount of ETH paid per outcome token (1 ether)
      */
-    function payoutRate() external view returns (uint256) {
+    function payoutRate() external pure returns (uint256) {
         return PAYOUT_PER_TOKEN;
     }
 
@@ -323,7 +323,6 @@ contract Market is ReentrancyGuard {
      * @return noToken_ Address of the NO outcome token
      * @return vault_ Address of the vault holding market ETH
      * @return lmsrB_ LMSR parameter b
-     * @return isExpired_ Whether the market has expired
      * @return isClosed_ Whether the market is closed or expired
      */
     function getMarketInfo()
@@ -336,7 +335,6 @@ contract Market is ReentrancyGuard {
             address noToken_,
             address vault_,
             uint256 lmsrB_,
-            bool isExpired_,
             bool isClosed_
         )
     {
@@ -347,7 +345,6 @@ contract Market is ReentrancyGuard {
             address(i_noToken),
             address(i_vault),
             i_lmsrB,
-            block.timestamp >= i_endTime,
             state == MarketState.CLOSED || block.timestamp >= i_endTime
         );
     }
