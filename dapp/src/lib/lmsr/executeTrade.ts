@@ -33,7 +33,7 @@ export async function executeTrade({
         const marketState = {
             qYes: toBigInt(market.qYes),
             qNo: toBigInt(market.qNo),
-            b: toBigInt(market.b),
+            b: toBigInt(market.lmsrB), // Use creator-specified lmsrB
             collateral: toBigInt(market.collateral),
             version: market.version,
         };

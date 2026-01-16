@@ -49,6 +49,9 @@ export async function POST(req: NextRequest) {
       endTime: marketInput.endTime,
       createdBy: creatorAddress.toLowerCase(),
       createdAt: Math.floor(Date.now() / 1000),
+      // Include LMSR-B and subsidy in metadata
+      lmsrB: marketInput.lmsrB,
+      subsidyAmount: marketInput.subsidyAmount,
     };
 
     // Upload to IPFS
@@ -83,6 +86,8 @@ export async function POST(req: NextRequest) {
       metadataHash,
       ipfsCid,
       endTime: marketInput.endTime,
+      lmsrB: marketInput.lmsrB,
+      subsidyAmount: marketInput.subsidyAmount,
       metadata,
     });
   } catch (error: any) {

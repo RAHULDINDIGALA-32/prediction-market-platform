@@ -12,7 +12,7 @@ import { mainnet, sepolia, base } from "viem/chains";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { creatorAddress, txHash, metadataHash, ipfsCid, metadata, chainId } = body;
+    const { creatorAddress, txHash, metadataHash, ipfsCid, metadata, chainId, lmsrB, subsidyAmount } = body;
 
     if (!creatorAddress || !txHash || !metadataHash || !ipfsCid || !metadata) {
       return NextResponse.json(
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
         status: "OPEN",
         qYes: "0",
         qNo: "0",
-        b: process.env.LMSR_B || "1000000000000000000",
+        lmsrB: lmsrB || "1000000000000000000", // Creator's LMSR-B or default
         collateral: "0",
         version: 0,
         metadataHash,
@@ -100,6 +100,8 @@ export async function POST(req: NextRequest) {
         category: metadata.category,
         resolutionSource: metadata.resolutionSource,
         endTime: BigInt(metadata.endTime),
+        subsidyAmount: subsidyAmount || undefined, // Creator's subsidy deposit
+        creator: creatorAddress.toLowerCase(),
       },
     });
 

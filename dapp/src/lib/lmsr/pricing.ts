@@ -19,7 +19,7 @@ export async function lmsrQuote(input: {
   const state = {
     qYes: toBigInt(market.qYes),
     qNo: toBigInt(market.qNo),
-    b: toBigInt(market.b),
+    b: toBigInt(market.lmsrB), // Use creator-specified lmsrB from market
     collateral: toBigInt(market.collateral),
     version: market.version,
   };

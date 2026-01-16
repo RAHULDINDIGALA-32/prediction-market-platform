@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Search, Loader2 } from "lucide-react";
 
-type MarketStatus = "OPEN" | "LOCKED" | "RESOLVED" | "SETTLED";
+type MarketStatus = "OPEN" | "CLOSED" | "RESOLVED" | "SETTLED";
 
 interface Market {
   id: string;

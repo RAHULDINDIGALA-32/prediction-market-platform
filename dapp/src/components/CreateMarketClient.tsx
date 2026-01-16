@@ -21,6 +21,8 @@ interface MarketCreationInput {
   resolutionSource: string;
   resolutionRules: string[];
   endTime: string; // ISO datetime string
+  lmsrB: string; // LMSR liquidity parameter (in ETH)
+  subsidyAmount: string; // Creator's subsidy (in ETH) = lmsrB * ln(2) ≈ lmsrB * 0.693
 }
 
 export default function CreateMarketClient() {
@@ -33,6 +35,8 @@ export default function CreateMarketClient() {
     resolutionSource: "",
     resolutionRules: [""],
     endTime: "",
+    lmsrB: "",
+    subsidyAmount: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,6 +80,30 @@ export default function CreateMarketClient() {
     setFormData({ ...formData, resolutionRules: newRules });
   };
 
+  // Handle LMSR-B change (bidirectional calculation)
+  // subsidy = lmsrB * ln(2) ≈ lmsrB * 0.693147
+  const handleLmsrBChange = (value: string) => {
+    if (value && !isNaN(parseFloat(value))) {
+      const lmsrB = parseFloat(value);
+      const subsidy = (lmsrB * 0.693147).toFixed(6);
+      setFormData({ ...formData, lmsrB: value, subsidyAmount: subsidy });
+    } else {
+      setFormData({ ...formData, lmsrB: value, subsidyAmount: "" });
+    }
+  };
+
+  // Handle Subsidy Amount change (bidirectional calculation)
+  // lmsrB = subsidyAmount / ln(2) ≈ subsidyAmount / 0.693147
+  const handleSubsidyChange = (value: string) => {
+    if (value && !isNaN(parseFloat(value))) {
+      const subsidy = parseFloat(value);
+      const lmsrB = (subsidy / 0.693147).toFixed(6);
+      setFormData({ ...formData, subsidyAmount: value, lmsrB });
+    } else {
+      setFormData({ ...formData, subsidyAmount: value, lmsrB: "" });
+    }
+  };
+
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
@@ -108,12 +136,50 @@ export default function CreateMarketClient() {
     } else {
       const endTime = new Date(formData.endTime);
       const now = new Date();
+      // Ensure end time is strictly in the future
       if (endTime <= now) {
-        newErrors.endTime = "End time must be in the future";
+        newErrors.endTime = "End time must be greater than current time";
       }
       const maxEndTime = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
       if (endTime > maxEndTime) {
         newErrors.endTime = "Market duration cannot exceed 365 days";
+      }
+    }
+
+    if (!formData.lmsrB) {
+      newErrors.lmsrB = "LMSR-B is required";
+    } else {
+      const lmsrB = parseFloat(formData.lmsrB);
+      if (isNaN(lmsrB) || lmsrB < 0) {
+        newErrors.lmsrB = "LMSR-B must be non-negative";
+      } else if (lmsrB === 0) {
+        newErrors.lmsrB = "LMSR-B must be greater than 0";
+      } else if (lmsrB < 0.1 || lmsrB > 1000) {
+        newErrors.lmsrB = "LMSR-B must be between 0.1 and 1000 ETH";
+      }
+    }
+
+    if (!formData.subsidyAmount) {
+      newErrors.subsidyAmount = "Subsidy amount is required";
+    } else {
+      const subsidy = parseFloat(formData.subsidyAmount);
+      if (isNaN(subsidy) || subsidy < 0) {
+        newErrors.subsidyAmount = "Subsidy must be non-negative";
+      } else if (subsidy === 0) {
+        newErrors.subsidyAmount = "Subsidy must be greater than 0";
+      } else if (subsidy < 0.069 || subsidy > 693) {
+        newErrors.subsidyAmount = "Subsidy must be between 0.069 and 693 ETH";
+      }
+    }
+
+    // Validate ratio (subsidy should be approximately B * 0.693)
+    if (formData.lmsrB && formData.subsidyAmount) {
+      const lmsrB = parseFloat(formData.lmsrB);
+      const subsidy = parseFloat(formData.subsidyAmount);
+      const expectedSubsidy = lmsrB * 0.693147;
+      const ratio = subsidy / expectedSubsidy;
+      if (ratio < 0.9 || ratio > 1.1) {
+        newErrors.subsidyAmount = `Subsidy should be approximately ${(expectedSubsidy).toFixed(6)} ETH (B × 0.693). Use the interdependent fields to auto-calculate.`;
       }
     }
 
@@ -168,6 +234,8 @@ export default function CreateMarketClient() {
           resolutionSource: formData.resolutionSource.trim(),
           resolutionRules: formData.resolutionRules.map((r) => r.trim()).filter((r) => r),
           endTime,
+          lmsrB: formData.lmsrB,
+          subsidyAmount: formData.subsidyAmount,
         }),
       });
 
@@ -223,6 +291,8 @@ export default function CreateMarketClient() {
             ipfsCid: preparedData.ipfsCid,
             metadata: preparedData.metadata,
             chainId,
+            lmsrB: formData.lmsrB,
+            subsidyAmount: formData.subsidyAmount,
           }),
         });
 
@@ -243,6 +313,8 @@ export default function CreateMarketClient() {
           resolutionSource: "",
           resolutionRules: [""],
           endTime: "",
+          lmsrB: "",
+          subsidyAmount: "",
         });
         setPreparedData(null);
         setTxHash(undefined);
@@ -541,6 +613,75 @@ export default function CreateMarketClient() {
           </CardContent>
         </Card>
 
+        {/* Market Liquidity & Subsidy */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Market Liquidity & Creator Subsidy</CardTitle>
+            <CardDescription>
+              Set the LMSR-B parameter (liquidity) or subsidy amount. They are linked: Max. Loss (or Subsidy) ≈ B × 0.693
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="lmsrB">LMSR-B Parameter (ETH) *</Label>
+              <Input
+                id="lmsrB"
+                type="number"
+                step="0.001"
+                min="0.1"
+                max="1000"
+                value={formData.lmsrB}
+                onChange={(e) => handleLmsrBChange(e.target.value)}
+                placeholder="e.g., 1.5 (liquidity parameter)"
+                className={errors.lmsrB ? "border-red-500" : ""}
+              />
+              {errors.lmsrB && (
+                <span className="text-xs text-red-500 mt-1 block">{errors.lmsrB}</span>
+              )}
+              <p className="text-xs text-zinc-400 mt-1">
+                Determines market liquidity and pricing. Higher B = more liquid market.
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="subsidyAmount">Creator Subsidy / Max Loss (ETH) *</Label>
+              <Input
+                id="subsidyAmount"
+                type="number"
+                step="0.001"
+                min="0.069"
+                max="693"
+                value={formData.subsidyAmount}
+                onChange={(e) => handleSubsidyChange(e.target.value)}
+                placeholder="e.g., 1.039 (subsidy = B × ln(2))"
+                className={errors.subsidyAmount ? "border-red-500" : ""}
+              />
+              {errors.subsidyAmount && (
+                <span className="text-xs text-red-500 mt-1 block">{errors.subsidyAmount}</span>
+              )}
+              <p className="text-xs text-zinc-400 mt-1">
+                Amount you deposit to bootstrap liquidity. This is your maximum loss if market resolves equally.
+              </p>
+            </div>
+
+            {formData.lmsrB && formData.subsidyAmount && (
+              <div className="bg-zinc-100 dark:bg-zinc-900 rounded-lg p-3 border border-zinc-200 dark:border-zinc-800">
+                <div className="text-xs text-zinc-600 dark:text-zinc-400 space-y-1">
+                  <div>
+                    <span className="font-semibold">LMSR-B:</span> {parseFloat(formData.lmsrB).toFixed(6)} ETH
+                  </div>
+                  <div>
+                    <span className="font-semibold">Subsidy (Max Loss):</span> {parseFloat(formData.subsidyAmount).toFixed(6)} ETH
+                  </div>
+                  <div className="text-zinc-500 dark:text-zinc-500 pt-1 border-t border-zinc-300 dark:border-zinc-700">
+                    Ratio: {(parseFloat(formData.subsidyAmount) / parseFloat(formData.lmsrB)).toFixed(6)} (should be ≈ 0.693)
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Preview */}
         {formData.title && (
           <Card>
@@ -574,6 +715,20 @@ export default function CreateMarketClient() {
                 <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Resolution Source</div>
                 <div>{formData.resolutionSource || "Not specified"}</div>
               </div>
+              {formData.lmsrB && (
+                <>
+                  <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4">
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">LMSR-B (Liquidity)</div>
+                    <div className="font-semibold">{parseFloat(formData.lmsrB).toFixed(6)} ETH</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Your Subsidy / Max Loss</div>
+                    <div className="font-semibold text-emerald-600 dark:text-emerald-400">
+                      {parseFloat(formData.subsidyAmount).toFixed(6)} ETH
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         )}

@@ -14,7 +14,7 @@ model Market {
   status          MarketStatus
   qYes            Decimal
   qNo             Decimal
-  b               Decimal
+  lmsrB           Decimal     // Creator-specified LMSR liquidity parameter
   collateral      Decimal
   version         Int
   createdAt       DateTime      @default(now())
@@ -30,7 +30,7 @@ model Market {
   endTime         BigInt?       // Unix timestamp from contract
   
   // Creator and subsidy tracking
-  creator         String?
+  creator         String
   subsidyAmount   Decimal?      // Creator's LMSR subsidy deposit (b * ln(2))
   
   signedQuotes    SignedQuote[]

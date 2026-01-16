@@ -121,7 +121,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
                 contractAddress: true,
                 qYes: true,
                 qNo: true,
-                b: true,
+                lmsrB: true, // Use creator-specified LMSR parameter
                 version: true,
                 status: true,
                 endTime: true,
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             body.isSell,
             toBigInt(market.qYes),
             toBigInt(market.qNo),
-            toBigInt(market.b),
+            toBigInt(market.lmsrB), // Use creator-specified lmsrB
             traderNonce.lastNonce,
             minAmountOut,                
             minReturn                     

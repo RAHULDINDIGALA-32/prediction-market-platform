@@ -15,6 +15,8 @@ export interface MarketMetadata {
   endTime: number;
   createdBy: string;
   createdAt: number;
+  lmsrB?: string; // Creator-specified LMSR liquidity parameter
+  subsidyAmount?: string; // Creator's subsidy deposit
 }
 
 /**
