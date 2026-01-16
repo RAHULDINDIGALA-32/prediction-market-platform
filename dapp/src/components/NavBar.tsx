@@ -16,7 +16,7 @@ const routes = [
   { href: "/settlement", label: "Settlement" },
   { href: "/oracle", label: "Oracle" },
   { href: "/admin/create-market", label: "Create Market", adminOnly: true },
-  { href: "/admin/manage-creators", label: "Manage Creators", adminOnly: true },
+  { href: "/admin/management", label: "Trust Management", adminOnly: true },
 ];
 
 function classNames(...classes: Array<string | false | null | undefined>) {

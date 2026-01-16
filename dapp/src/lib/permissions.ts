@@ -1,9 +1,6 @@
 import { prisma } from "@/lib/db";
 import { ethers } from "ethers";
 
-export type CreatorRole = "ADMIN" | "EDITOR";
-
-
 const ADMIN_ADDRESS = (() => {
   const addr = process.env.ADMIN_ADDRESS?.toLowerCase();
   if (addr && !ethers.isAddress(addr)) {
@@ -36,43 +33,34 @@ export async function isAuthorizedCreator(address: string | undefined | null): P
   }
 
   // Check whitelist
-  const creator = await prisma.creator.findUnique({
+  const creator = await prisma.whitelistedCreator.findUnique({
     where: { address: address.toLowerCase() },
   });
 
-  return !!creator;
+  return !!creator?.isWhitelisted;
 }
 
 /**
  * Check if an address is an admin
- * (Either system admin or has ADMIN role in whitelist)
+ * (Only system admin, since WhitelistedCreator doesn't have roles)
  */
 export async function isAdmin(address: string | undefined | null): Promise<boolean> {
   if (!address) return false;
 
-  // System admin is always admin
-  if (isSystemAdmin(address)) {
-    return true;
-  }
-
-  // Check whitelist for ADMIN role
-  const creator = await prisma.creator.findUnique({
-    where: { address: address.toLowerCase() },
-  });
-
-  return creator?.role === "ADMIN";
+  // Only system admin is considered admin
+  return isSystemAdmin(address);
 }
 
 /**
  * Add a new creator to whitelist (admin only)
  */
-export async function addCreator(address: string, role: CreatorRole = "EDITOR") {
-  return prisma.creator.upsert({
+export async function addCreator(address: string) {
+  return prisma.whitelistedCreator.upsert({
     where: { address: address.toLowerCase() },
-    update: { role },
+    update: { isWhitelisted: true },
     create: {
       address: address.toLowerCase(),
-      role,
+      isWhitelisted: true,
     },
   });
 }
@@ -81,8 +69,9 @@ export async function addCreator(address: string, role: CreatorRole = "EDITOR") 
  * Remove a creator from whitelist (admin only)
  */
 export async function removeCreator(address: string) {
-  return prisma.creator.delete({
+  return prisma.whitelistedCreator.update({
     where: { address: address.toLowerCase() },
+    data: { isWhitelisted: false },
   });
 }
 
@@ -90,7 +79,8 @@ export async function removeCreator(address: string) {
  * Get all whitelisted creators
  */
 export async function getAllCreators() {
-  return prisma.creator.findMany({
+  return prisma.whitelistedCreator.findMany({
+    where: { isWhitelisted: true },
     orderBy: { createdAt: "desc" },
   });
 }

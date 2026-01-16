@@ -11,52 +11,29 @@ import { ethers } from "ethers";
 interface CreatorWhitelistRequest {
     adminAddress: string;
     creatorAddress: string;
-    role?: "ADMIN" | "EDITOR";
+    isWhitelisted: boolean;
+    txHash: string;
 }
 
 /**
- * GET /api/admin/creators?adminAddress=0x...
- * List all whitelisted creators (admin only)
+ * GET /api/admin/creators
+ * List all whitelisted creators
  */
 export async function GET(req: NextRequest) {
     try {
-        const address = req.nextUrl.searchParams.get("adminAddress");
-
-        if (!address) {
-            return NextResponse.json(
-                { error: "Admin address required" },
-                { status: 400 }
-            );
-        }
-
-        // Validate address format
-        if (!ethers.isAddress(address)) {
-            return NextResponse.json(
-                { error: "Invalid admin address" },
-                { status: 400 }
-            );
-        }
-
-        // Check if requester is admin
-        const admin = await isAdmin(address);
-        if (!admin) {
-            return NextResponse.json(
-                { error: "Unauthorized: Admin access required" },
-                { status: 403 }
-            );
-        }
-
         const creators = await getAllCreators();
         return NextResponse.json({
             success: true,
             creators: creators.map(c => ({
+                id: c.id,
                 address: c.address,
                 isWhitelisted: c.isWhitelisted,
-                role: c.role,
                 createdAt: c.createdAt,
+                updatedAt: c.updatedAt,
             })),
         });
     } catch (error: any) {
+        console.error("Failed to fetch creators:", error);
         return NextResponse.json(
             { success: false, error: "Internal server error", details: error.message },
             { status: 500 }
@@ -66,21 +43,22 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/admin/creators
- * Whitelist a new market creator (admin only)
+ * Whitelist or remove a market creator
  * 
  * Required body:
  * - adminAddress: Admin wallet address
- * - creatorAddress: Creator address to whitelist
- * - role: "EDITOR" or "ADMIN" (optional, defaults to EDITOR)
+ * - creatorAddress: Creator address to whitelist/remove
+ * - isWhitelisted: true to whitelist, false to remove
+ * - txHash: Transaction hash from on-chain contract call
  */
 export async function POST(req: NextRequest) {
     try {
         const body: CreatorWhitelistRequest = await req.json();
-        const { adminAddress, creatorAddress, role = "EDITOR" } = body;
+        const { adminAddress, creatorAddress, isWhitelisted, txHash } = body;
 
-        if (!adminAddress || !creatorAddress) {
+        if (!adminAddress || !creatorAddress || txHash === undefined) {
             return NextResponse.json(
-                { error: "Admin address and creator address required" },
+                { error: "Admin address, creator address, and txHash required" },
                 { status: 400 }
             );
         }
@@ -102,78 +80,38 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // Add creator to whitelist
-        await addCreator(creatorAddress, role);
-
-        return NextResponse.json(
-            {
-                success: true,
-                message: "Creator whitelisted successfully",
-                creator: {
-                    address: ethers.getAddress(creatorAddress),
-                    role,
+        // Add or remove creator
+        if (isWhitelisted) {
+            await addCreator(creatorAddress);
+            return NextResponse.json(
+                {
+                    success: true,
+                    message: "Creator whitelisted successfully",
+                    creator: {
+                        address: ethers.getAddress(creatorAddress),
+                        isWhitelisted: true,
+                        txHash,
+                    },
                 },
-            },
-            { status: 201 }
-        );
+                { status: 201 }
+            );
+        } else {
+            await removeCreator(creatorAddress);
+            return NextResponse.json(
+                {
+                    success: true,
+                    message: "Creator removed from whitelist",
+                    creator: {
+                        address: ethers.getAddress(creatorAddress),
+                        isWhitelisted: false,
+                        txHash,
+                    },
+                },
+                { status: 200 }
+            );
+        }
     } catch (error: any) {
         console.error("Creator whitelist error:", error);
-        return NextResponse.json(
-            { success: false, error: "Internal server error", details: error.message },
-            { status: 500 }
-        );
-    }
-}
-
-/**
- * DELETE /api/admin/creators
- * Revoke creator whitelist status (admin only)
- * 
- * Required body:
- * - adminAddress: Admin wallet address
- * - creatorAddress: Creator address to revoke
- */
-export async function DELETE(req: NextRequest) {
-    try {
-        const body = await req.json();
-        const { adminAddress, creatorAddress } = body;
-
-        if (!adminAddress || !creatorAddress) {
-            return NextResponse.json(
-                { error: "Admin address and creator address required" },
-                { status: 400 }
-            );
-        }
-
-        // Validate address formats
-        if (!ethers.isAddress(adminAddress) || !ethers.isAddress(creatorAddress)) {
-            return NextResponse.json(
-                { error: "Invalid address format" },
-                { status: 400 }
-            );
-        }
-
-        // Check admin authorization
-        const admin = await isAdmin(adminAddress);
-        if (!admin) {
-            return NextResponse.json(
-                { error: "Unauthorized: Admin access required" },
-                { status: 403 }
-            );
-        }
-
-        // Remove creator from whitelist
-        await removeCreator(creatorAddress);
-
-        return NextResponse.json({
-            success: true,
-            message: "Creator whitelist revoked successfully",
-            creator: {
-                address: ethers.getAddress(creatorAddress),
-            },
-        });
-    } catch (error: any) {
-        console.error("Creator revoke error:", error);
         return NextResponse.json(
             { success: false, error: "Internal server error", details: error.message },
             { status: 500 }
