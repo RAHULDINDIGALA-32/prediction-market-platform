@@ -39,7 +39,7 @@ export default function NavBar({ children }: Props) {
                 Prediction Markets
               </div>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                On-chain binary markets with optimistic oracle
+                On-chain Binary Markets 
               </p>
             </div>
           </div>

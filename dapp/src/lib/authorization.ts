@@ -1,19 +1,19 @@
 /**
- * @file authorization.ts
  * @description Authorization checks for dApp actions
- * Reads from cached database tables (synced from smart contracts via events)
- * Optional: Verifies against contract for critical operations
+ * Multi-tier caching strategy:
+ * - L1 Cache: In-memory 
+ * - L2 Cache: Database 
+ * - L3 Fallback: Contract calls 
  * 
- * Pattern: Event Indexing + Database Cache
- * Used by: Polymarket, Manifold, Uniswap
+ * Pattern: Event Indexing + Database Cache + In-Memory Cache
  */
 
 import { prisma } from "./db";
+import { authorizationCache } from "./authorizationCache";
 import { ethers } from "ethers";
 
 /**
  * Check if an address is a whitelisted market creator
- * Reads from cached MarketFactory.whitelistedCreators mapping
  * 
  * @param address - Address to check
  * @returns true if creator is whitelisted, false otherwise
@@ -24,12 +24,26 @@ export async function isWhitelistedCreator(address: string): Promise<boolean> {
     return false;
   }
 
+  const normalizedAddress = address.toLowerCase();
+
+  // L1: Check in-memory cache first (FAST)
+  const cachedValue = authorizationCache.getCreator(normalizedAddress);
+  if (cachedValue !== undefined) {
+    return cachedValue;
+  }
+
+  // L2: Check database cache (MEDIUM)
   try {
     const creator = await prisma.whitelistedCreator.findUnique({
-      where: { address: address.toLowerCase() },
+      where: { address: normalizedAddress },
     });
 
-    return creator?.isWhitelisted ?? false;
+    const isWhitelisted = creator?.isWhitelisted ?? false;
+    
+    // Update L1 cache for future queries
+    authorizationCache.setCreator(normalizedAddress, isWhitelisted);
+    
+    return isWhitelisted;
   } catch (error) {
     console.error(`Database query failed for creator ${address}:`, error);
     return false;
@@ -38,7 +52,6 @@ export async function isWhitelistedCreator(address: string): Promise<boolean> {
 
 /**
  * Check if an address is an authorized quote signer
- * Reads from cached QuoteVerifier.allowedSigners mapping
  * 
  * @param address - Address to check
  * @returns true if signer is authorized, false otherwise
@@ -49,12 +62,26 @@ export async function isAuthorizedSigner(address: string): Promise<boolean> {
     return false;
   }
 
+  const normalizedAddress = address.toLowerCase();
+
+  // L1: Check in-memory cache first (FAST)
+  const cachedValue = authorizationCache.getSigner(normalizedAddress);
+  if (cachedValue !== undefined) {
+    return cachedValue;
+  }
+
+  // L2: Check database cache (MEDIUM)
   try {
     const signer = await prisma.authorizedSigner.findUnique({
-      where: { address: address.toLowerCase() },
+      where: { address: normalizedAddress },
     });
 
-    return signer?.isAllowed ?? false;
+    const isAllowed = signer?.isAllowed ?? false;
+    
+    // Update L1 cache
+    authorizationCache.setSigner(normalizedAddress, isAllowed);
+    
+    return isAllowed;
   } catch (error) {
     console.error(`Database query failed for signer ${address}:`, error);
     return false;
@@ -63,7 +90,9 @@ export async function isAuthorizedSigner(address: string): Promise<boolean> {
 
 /**
  * Check if an address is an authorized oracle resolver
- * Reads from cached OracleAdapter.resolvers mapping
+ * 
+ * Three-tier lookup with cache synchronization
+ * Cache synced automatically every 1 minute from contract events
  * 
  * @param address - Address to check
  * @returns true if resolver is authorized, false otherwise
@@ -74,12 +103,26 @@ export async function isOracleResolver(address: string): Promise<boolean> {
     return false;
   }
 
+  const normalizedAddress = address.toLowerCase();
+
+  // L1: Check in-memory cache first
+  const cachedValue = authorizationCache.getResolver(normalizedAddress);
+  if (cachedValue !== undefined) {
+    return cachedValue;
+  }
+
+  // L2: Check database cache
   try {
     const resolver = await prisma.oracleResolver.findUnique({
-      where: { address: address.toLowerCase() },
+      where: { address: normalizedAddress },
     });
 
-    return resolver?.isAllowed ?? false;
+    const isAllowed = resolver?.isAllowed ?? false;
+    
+    // Update L1 cache
+    authorizationCache.setResolver(normalizedAddress, isAllowed);
+    
+    return isAllowed;
   } catch (error) {
     console.error(`Database query failed for resolver ${address}:`, error);
     return false;
@@ -167,8 +210,8 @@ export async function verifyWithContract(
 
 /**
  * Safe authorization check with fallback
- * 1. Check database cache (fast)
- * 2. If not found, verify against contract (defensive)
+ * 1. Check database cache (
+ * 2. If not found, verify against contract
  * 3. If verification succeeds, update database for future queries
  * 
  * Use for user-facing authorization decisions

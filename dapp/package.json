@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "sync-events": "node scripts/syncEvents.js",
+    "sync-auth": "npx ts-node scripts/syncAuthorizationEvents.ts",
     "register-market": "node scripts/registerMarketCli.js",
     "build": "next build",
     "start": "next start",
