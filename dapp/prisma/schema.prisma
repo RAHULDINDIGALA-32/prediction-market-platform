@@ -139,3 +139,44 @@ enum CreatorRole {
   ADMIN
   EDITOR
 }
+
+// Authorization models for syncing from blockchain
+model WhitelistedCreator {
+  id           String   @id @default(uuid())
+  address      String   @unique @db.VarChar(42)
+  isWhitelisted Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([address])
+}
+
+model AuthorizedSigner {
+  id        String   @id @default(uuid())
+  address   String   @unique @db.VarChar(42)
+  isAllowed Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([address])
+}
+
+model OracleResolver {
+  id        String   @id @default(uuid())
+  address   String   @unique @db.VarChar(42)
+  isAllowed Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([address])
+}
+
+model SyncLog {
+  id               String   @id @default(uuid())
+  service          String   @unique // "marketFactory", "quoteVerifier", "oracleAdapter"
+  lastBlockScanned BigInt   @default(0)
+  lastSyncedAt     DateTime @updatedAt
+  createdAt        DateTime @default(now())
+
+  @@index([service])
+}

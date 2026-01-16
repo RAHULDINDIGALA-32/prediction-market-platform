@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
           { name: "metadataHash", type: "bytes32", indexed: true },
           { name: "endTime", type: "uint256", indexed: true },
           { name: "creator", type: "address", indexed: false },
+          { name: "subsidy", type: "uint256", indexed: false },
         ],
       },
     ] as const;

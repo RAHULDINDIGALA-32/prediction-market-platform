@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, CheckCircle2, Loader2, Plus, X, ExternalLink } from "lucide-react";
 import { formatAddress } from "@/lib/utils";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useQuery } from "@tanstack/react-query";
 
 interface MarketCreationInput {
@@ -48,6 +47,9 @@ export default function CreateMarketClient() {
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash: txHash,
   });
+
+  // Calculate total ETH required: MARKET_CREATION_FEE (0.03 ETH) + subsidy
+      const MARKET_CREATION_FEE = BigInt(Math.floor(0.03 * 1e18));
 
   // Check if user is authorized
   const { data: isAuthorized, isLoading: checkingAuth } = useQuery({
@@ -136,10 +138,12 @@ export default function CreateMarketClient() {
     } else {
       const endTime = new Date(formData.endTime);
       const now = new Date();
-      // Ensure end time is strictly in the future
-      if (endTime <= now) {
-        newErrors.endTime = "End time must be greater than current time";
+      // Enforce minimum 24 hours from now
+      const minEndTime = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      if (endTime < minEndTime) {
+        newErrors.endTime = "Market must run for at least 24 hours";
       }
+      // Enforce maximum 365 days from now
       const maxEndTime = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
       if (endTime > maxEndTime) {
         newErrors.endTime = "Market duration cannot exceed 365 days";
@@ -191,10 +195,12 @@ export default function CreateMarketClient() {
     {
       type: "function",
       name: "createMarket",
-      stateMutability: "nonpayable",
+      stateMutability: "payable",
       inputs: [
         { name: "metadataHash", type: "bytes32" },
         { name: "endTime", type: "uint256" },
+        { name: "lmsrB", type: "uint256" },
+        { name: "subsidyAmount", type: "uint256" },
       ],
       outputs: [{ name: "market", type: "address" }],
     },
@@ -256,11 +262,20 @@ export default function CreateMarketClient() {
       // Convert metadataHash from hex string to bytes32
       const metadataHash = prepareData.metadataHash as `0x${string}`;
 
+      // Convert lmsrB and subsidyAmount from ETH (string) to wei (BigInt)
+      // 1 ETH = 10^18 wei
+      const lmsrBwei = BigInt(Math.floor(parseFloat(formData.lmsrB) * 1e18));
+      const subsidyAmountWei = BigInt(Math.floor(parseFloat(formData.subsidyAmount) * 1e18));
+
+    
+      const totalValue = MARKET_CREATION_FEE + subsidyAmountWei;
+
       const hash = await writeContractAsync({
         address: marketFactoryAddress,
         abi: MARKET_FACTORY_ABI,
         functionName: "createMarket",
-        args: [metadataHash, BigInt(endTime)],
+        args: [metadataHash, BigInt(endTime), lmsrBwei, subsidyAmountWei],
+        value: totalValue,
       });
 
       setTxHash(hash);
@@ -627,7 +642,7 @@ export default function CreateMarketClient() {
               <Input
                 id="lmsrB"
                 type="number"
-                step="0.001"
+                step="0.000001"
                 min="0.1"
                 max="1000"
                 value={formData.lmsrB}
@@ -648,7 +663,7 @@ export default function CreateMarketClient() {
               <Input
                 id="subsidyAmount"
                 type="number"
-                step="0.001"
+                step="0.000001"
                 min="0.069"
                 max="693"
                 value={formData.subsidyAmount}
@@ -671,10 +686,22 @@ export default function CreateMarketClient() {
                     <span className="font-semibold">LMSR-B:</span> {parseFloat(formData.lmsrB).toFixed(6)} ETH
                   </div>
                   <div>
-                    <span className="font-semibold">Subsidy (Max Loss):</span> {parseFloat(formData.subsidyAmount).toFixed(6)} ETH
+                    <span className="font-semibold">Your Subsidy (Max Loss):</span> {parseFloat(formData.subsidyAmount).toFixed(6)} ETH
                   </div>
                   <div className="text-zinc-500 dark:text-zinc-500 pt-1 border-t border-zinc-300 dark:border-zinc-700">
                     Ratio: {(parseFloat(formData.subsidyAmount) / parseFloat(formData.lmsrB)).toFixed(6)} (should be ≈ 0.693)
+                  </div>
+                  <div className="pt-2 border-t border-zinc-300 dark:border-zinc-700">
+                    <div className="font-semibold mb-1 text-zinc-700 dark:text-zinc-300">Total Amount Required:</div>
+                    <div>
+                      <span className="font-semibold">Creation Fee:</span> 0.03 ETH
+                    </div>
+                    <div>
+                      <span className="font-semibold">Your Subsidy:</span> {parseFloat(formData.subsidyAmount).toFixed(6)} ETH
+                    </div>
+                    <div className="font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
+                      Total: {(0.03 + parseFloat(formData.subsidyAmount)).toFixed(6)} ETH
+                    </div>
                   </div>
                 </div>
               </div>

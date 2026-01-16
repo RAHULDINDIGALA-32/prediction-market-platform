@@ -14,7 +14,25 @@ async function getMarket(id: string) {
         },
       },
     });
-    return market;
+    
+    if (!market) return null;
+    
+    // Convert Decimal fields to strings for client component serialization
+    return {
+      ...market,
+      qYes: market.qYes.toString(),
+      qNo: market.qNo.toString(),
+      lmsrB: market.lmsrB.toString(),
+      collateral: market.collateral.toString(),
+      subsidyAmount: market.subsidyAmount ? market.subsidyAmount.toString() : null,
+      trades: market.trades.map(trade => ({
+        ...trade,
+        priceYes: trade.priceYes.toString(),
+        priceNo: trade.priceNo.toString(),
+        amount: trade.amount.toString(),
+        cost: trade.cost.toString(),
+      })),
+    };
   } catch (error) {
     return null;
   }

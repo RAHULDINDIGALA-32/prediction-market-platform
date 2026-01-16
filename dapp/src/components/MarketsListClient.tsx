@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import MarketCardEnhanced from "@/components/MarketCardEnhanced";
+import MarketCard from "@/components/MarketCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Search, Loader2 } from "lucide-react";
@@ -21,7 +21,7 @@ interface Market {
   description?: string | null;
   category?: string | null;
   ipfsCid?: string | null;
-  endTime?: bigint | null;
+  endTime?: Date | number | bigint | null;
 }
 
 interface Props {
@@ -29,11 +29,12 @@ interface Props {
 }
 
 type SortOption = "newest" | "volume" | "ending-soon" | "probability";
+type CategoryOption = "all" | "crypto" | "politics" | "sports" | "economics" | "other";
 
 export default function MarketsListClient({ initialMarkets }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<MarketStatus | "all">("all");
-  const [sortBy, setSortBy] = useState<SortOption>("newest");
+  const [sortBy, setSortBy] = useState<CategoryOption>("all");
   const [isLoading, setIsLoading] = useState(false);
 
   const filteredAndSorted = useMemo(() => {
@@ -50,26 +51,26 @@ export default function MarketsListClient({ initialMarkets }: Props) {
       filtered = filtered.filter(
         (m) =>
           m.id.toLowerCase().includes(query) ||
-          m.contractAddress?.toLowerCase().includes(query)
+          m.contractAddress?.toLowerCase().includes(query) ||
+          m.title?.toLowerCase().includes(query)
       );
     }
 
-    // Sort
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case "newest":
-          return b.createdAt.getTime() - a.createdAt.getTime();
-        case "volume":
-          return Number(b.collateral) - Number(a.collateral);
-        case "probability":
-          // Sort by how close to 50/50 (most uncertain)
-          const aProb = Math.abs(0.5 - Number(a.qYes) / (Number(a.qYes) + Number(a.qNo)));
-          const bProb = Math.abs(0.5 - Number(b.qYes) / (Number(b.qYes) + Number(b.qNo)));
-          return bProb - aProb;
-        default:
-          return 0;
-      }
-    });
+    // Sort by category
+    if (sortBy === "all") {
+      filtered = filtered;
+    }else if (sortBy === "crypto") {
+      filtered = filtered.filter((m) => m.category === "crypto");
+    } else if (sortBy === "politics") {
+      filtered = filtered.filter((m) => m.category === "politics");
+    } else if (sortBy === "sports") {
+      filtered = filtered.filter((m) => m.category === "sports");
+    } else if (sortBy === "economics") {
+      filtered = filtered.filter((m) => m.category === "economics");
+    } else if (sortBy === "other") {
+      filtered = filtered.filter((m) => m.category === "other");
+    }
+
 
     return filtered;
   }, [initialMarkets, statusFilter, searchQuery, sortBy]);
@@ -106,20 +107,23 @@ export default function MarketsListClient({ initialMarkets }: Props) {
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="OPEN">Open</SelectItem>
-              <SelectItem value="LOCKED">Locked</SelectItem>
+              <SelectItem value="CLOSED">Closed</SelectItem>
               <SelectItem value="RESOLVED">Resolved</SelectItem>
               <SelectItem value="SETTLED">Settled</SelectItem>
             </SelectContent>
           </Select>
 
-          <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as CategoryOption)}>
             <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="newest">Newest</SelectItem>
-              <SelectItem value="volume">Volume</SelectItem>
-              <SelectItem value="probability">Most Uncertain</SelectItem>
+              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="crypto">Crypto</SelectItem>
+              <SelectItem value="politics">Politics</SelectItem>
+              <SelectItem value="sports">Sports</SelectItem>
+              <SelectItem value="economics">Economics</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -140,17 +144,9 @@ export default function MarketsListClient({ initialMarkets }: Props) {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {filteredAndSorted.map((market) => (
-              <MarketCardEnhanced
+              <MarketCard
                 key={market.id}
-                market={{
-                  id: market.id,
-                  status: market.status,
-                  qYes: market.qYes,
-                  qNo: market.qNo,
-                  collateral: market.collateral,
-                  contractAddress: market.contractAddress ?? undefined,
-                  createdAt: market.createdAt,
-                }}
+                market={market}
               />
             ))}
           </AnimatePresence>

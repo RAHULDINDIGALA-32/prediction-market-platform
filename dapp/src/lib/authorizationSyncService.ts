@@ -162,7 +162,7 @@ export class AuthorizationSyncService {
         .findUnique({
           where: { service: "marketFactory" },
         })
-        .then((log) => log?.lastBlockScanned ?? 0);
+        .then((log: any) => log?.lastBlockScanned ?? 0);
 
       const currentBlock = await this.provider.getBlockNumber();
       const fromBlock = Math.max(lastSync + 1, currentBlock - this.config.maxBlockRange);
@@ -178,8 +178,12 @@ export class AuthorizationSyncService {
       );
 
       for (const event of events) {
-        const [creator, isWhitelisted] = event.args;
-        const creatorAddr = creator.toLowerCase();
+        const creator = (event as any).args?.[0];
+        const isWhitelisted = (event as any).args?.[1];
+        
+        if (!creator || isWhitelisted === undefined) continue;
+        
+        const creatorAddr = creator.toString().toLowerCase();
 
         await prisma.whitelistedCreator.upsert({
           where: { address: creatorAddr },
@@ -231,7 +235,7 @@ export class AuthorizationSyncService {
         .findUnique({
           where: { service: "quoteVerifier" },
         })
-        .then((log) => log?.lastBlockScanned ?? 0);
+        .then((log: any) => log?.lastBlockScanned ?? 0);
 
       const currentBlock = await this.provider.getBlockNumber();
       const fromBlock = Math.max(lastSync + 1, currentBlock - this.config.maxBlockRange);
@@ -248,8 +252,10 @@ export class AuthorizationSyncService {
       );
 
       for (const event of addedEvents) {
-        const [signer] = event.args;
-        const signerAddr = signer.toLowerCase();
+        const signer = (event as any).args?.[0];
+        if (!signer) continue;
+        
+        const signerAddr = signer.toString().toLowerCase();
 
         await prisma.authorizedSigner.upsert({
           where: { address: signerAddr },
@@ -269,8 +275,10 @@ export class AuthorizationSyncService {
       );
 
       for (const event of removedEvents) {
-        const [signer] = event.args;
-        const signerAddr = signer.toLowerCase();
+        const signer = (event as any).args?.[0];
+        if (!signer) continue;
+        
+        const signerAddr = signer.toString().toLowerCase();
 
         await prisma.authorizedSigner.update({
           where: { address: signerAddr },
@@ -320,7 +328,7 @@ export class AuthorizationSyncService {
         .findUnique({
           where: { service: "oracleAdapter" },
         })
-        .then((log) => log?.lastBlockScanned ?? 0);
+        .then((log: any) => log?.lastBlockScanned ?? 0);
 
       const currentBlock = await this.provider.getBlockNumber();
       const fromBlock = Math.max(lastSync + 1, currentBlock - this.config.maxBlockRange);
@@ -337,8 +345,10 @@ export class AuthorizationSyncService {
       );
 
       for (const event of addedEvents) {
-        const [resolver] = event.args;
-        const resolverAddr = resolver.toLowerCase();
+        const resolver = (event as any).args?.[0];
+        if (!resolver) continue;
+        
+        const resolverAddr = resolver.toString().toLowerCase();
 
         await prisma.oracleResolver.upsert({
           where: { address: resolverAddr },
@@ -358,8 +368,10 @@ export class AuthorizationSyncService {
       );
 
       for (const event of removedEvents) {
-        const [resolver] = event.args;
-        const resolverAddr = resolver.toLowerCase();
+        const resolver = (event as any).args?.[0];
+        if (!resolver) continue;
+        
+        const resolverAddr = resolver.toString().toLowerCase();
 
         await prisma.oracleResolver.update({
           where: { address: resolverAddr },
