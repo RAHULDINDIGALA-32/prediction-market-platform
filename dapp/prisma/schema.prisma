@@ -114,7 +114,7 @@ model Trade {
 
 enum MarketStatus {
   OPEN
-  LOCKED
+  CLOSED     
   RESOLVED
   SETTLED
 }

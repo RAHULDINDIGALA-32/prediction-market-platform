@@ -96,13 +96,16 @@ export default function TradeForm({ initialMarketId, compact }: Props) {
     try {
       setStatus("Requesting server-side quote...");
 
+      
+      const outcome = side === "YES" ? 0 : 1;
+
       const res = await fetch("/api/quote", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           marketId,
           trader: address,
-          side,
+          outcome,      
           amount,
           isSell,
         }),
@@ -126,8 +129,8 @@ export default function TradeForm({ initialMarketId, compact }: Props) {
         BigInt(quote.deadline),
         BigInt(quote.nonce),
         quote.isSell,
-        BigInt(quote.minAmountOut ?? 0),
-        BigInt(quote.minReturn ?? 0),
+        BigInt(quote.minAmountOut ?? 0), 
+        BigInt(quote.minReturn ?? 0),     
       ] as const;
 
       const value = isSell ? 0n : BigInt(quote.cost);

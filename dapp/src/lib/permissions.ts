@@ -1,8 +1,19 @@
 import { prisma } from "@/lib/db";
+import { ethers } from "ethers";
 
 export type CreatorRole = "ADMIN" | "EDITOR";
 
-const ADMIN_ADDRESS = process.env.ADMIN_ADDRESS?.toLowerCase();
+
+const ADMIN_ADDRESS = (() => {
+  const addr = process.env.ADMIN_ADDRESS?.toLowerCase();
+  if (addr && !ethers.isAddress(addr)) {
+    console.warn(
+      "WARNING: ADMIN_ADDRESS environment variable is not a valid Ethereum address: " +
+      addr
+    );
+  }
+  return addr;
+})();
 
 /**
  * Check if an address is the system admin (from env)

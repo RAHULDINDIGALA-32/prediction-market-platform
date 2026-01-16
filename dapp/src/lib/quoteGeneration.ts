@@ -10,48 +10,65 @@ import { Decimal } from "@prisma/client/runtime/library";
 import { lmsrCost } from "./lmsr/math";
 import { Outcome } from "./lmsr/types";
 
-const CHAIN_ID = BigInt(process.env.CHAIN_ID || "31337");
+// Initialize CHAIN_ID with validation and logging
+const CHAIN_ID = (() => {
+    const chainIdStr = process.env.CHAIN_ID;
+    if (!chainIdStr) {
+        console.warn(
+            "CHAIN_ID not configured, defaulting to 31337 (Hardhat). " +
+            "For Sepolia testnet, set CHAIN_ID=11155111"
+        );
+        return BigInt("31337");
+    }
+    const chainId = BigInt(chainIdStr);
+    if (chainId === BigInt("11155111")) {
+        console.log("Quote generation configured for Sepolia testnet (chainId: 11155111)");
+    }
+    return chainId;
+})();
+
 const QUOTE_DEADLINE_SECONDS = parseInt(process.env.QUOTE_DEADLINE_SECONDS || "300"); // 5 minutes default
 
-/**
- * EIP-712 domain separator for TradeQuote signing
- */
-function getEIP712Domain(marketAddress: string) {
+// Must match on-chain: QuoteVerifier.sol constructor
+function getEIP712Domain(quoteVerifierAddress: string) {
     return {
-        name: "TradeQuote",
+        name: "PredictionMarket-QuoteVerifier", 
         version: "1",
         chainId: CHAIN_ID,
-        verifyingContract: marketAddress,
+        verifyingContract: quoteVerifierAddress,  
     };
 }
 
 /**
  * EIP-712 type definitions for TradeQuote
+ * On-chain includes: trader, market, outcome, amount, cost, deadline, nonce, isSell, minAmountOut, minReturn
  */
 const TRADE_QUOTE_TYPES = {
     TradeQuote: [
         { name: "trader", type: "address" },
         { name: "market", type: "address" },
-        { name: "outcome", type: "uint8" },
+        { name: "outcome", type: "uint8" },  // Enum is uint8 in Solidity
         { name: "amount", type: "uint256" },
         { name: "cost", type: "uint256" },
-        { name: "isSell", type: "bool" },
         { name: "deadline", type: "uint256" },
         { name: "nonce", type: "uint256" },
-        { name: "marketVersion", type: "uint256" },
+        { name: "isSell", type: "bool" },
+        { name: "minAmountOut", type: "uint256" },  
+        { name: "minReturn", type: "uint256" },   
     ],
 };
 
 export interface TradeQuoteData {
     trader: string;
     market: string;
-    outcome: 0 | 1; // 0 = YES, 1 = NO
+    outcome: 0 | 1; // 0 = YES, 1 = NO (maps to Outcome.YES and Outcome.NO)
     amount: bigint;
     cost: bigint;
     isSell: boolean;
     deadline: number;
     nonce: bigint;
-    marketVersion: number;
+    minAmountOut: bigint;  
+    minReturn: bigint;     
 }
 
 export interface SignedTradeQuote extends TradeQuoteData {
@@ -64,6 +81,7 @@ export interface SignedTradeQuote extends TradeQuoteData {
  * Trade cost = C(q + Δq) - C(q)
  * 
  * @param marketAddress - Address of the market contract
+ * @param quoteVerifierAddress - Address of the QuoteVerifier contract (for EIP-712 domain)
  * @param trader - Address of the trader executing the trade
  * @param outcome - Outcome to trade (YES=0 or NO=1)
  * @param amount - Number of tokens to buy/sell (in wei)
@@ -72,11 +90,13 @@ export interface SignedTradeQuote extends TradeQuoteData {
  * @param currentQNo - Current NO token quantity in market
  * @param lmsrB - LMSR parameter b (liquidity measure)
  * @param traderNonce - Trader's current nonce for this market
- * @param marketVersion - Current version of market state
+ * @param minAmountOut - Minimum tokens for buys (slippage protection)
+ * @param minReturn - Minimum ETH for sells (slippage protection)
  * @returns Quote with all required fields for on-chain execution
  */
 export function generateTradeQuote(
     marketAddress: string,
+    quoteVerifierAddress: string,  
     trader: string,
     outcome: 0 | 1,
     amount: bigint,
@@ -85,8 +105,19 @@ export function generateTradeQuote(
     currentQNo: bigint,
     lmsrB: bigint,
     traderNonce: bigint,
-    marketVersion: number
+    minAmountOut: bigint,  
+    minReturn: bigint    
 ): TradeQuoteData {
+    if (!ethers.isAddress(marketAddress)) {
+        throw new Error("Invalid market address");
+    }
+    if (!ethers.isAddress(quoteVerifierAddress)) {
+        throw new Error("Invalid quote verifier address");
+    }
+    if (!ethers.isAddress(trader)) {
+        throw new Error("Invalid trader address");
+    }
+
     // Calculate cost using LMSR
     const oldCost = lmsrCost(currentQYes, currentQNo, lmsrB);
 
@@ -132,7 +163,8 @@ export function generateTradeQuote(
         isSell,
         deadline,
         nonce: traderNonce,
-        marketVersion,
+        minAmountOut,  
+        minReturn,     
     };
 }
 
@@ -141,14 +173,16 @@ export function generateTradeQuote(
  * Enables on-chain verification and prevents replay attacks
  * 
  * @param quote - The trade quote to sign
- * @param signerPrivateKey - Private key of the signer (should be backend oracle)
+ * @param quoteVerifierAddress - Address of QuoteVerifier contract for domain
+ * @param signer - Signer instance (should be backend oracle)
  * @returns Signed quote ready for submission
  */
 export async function signTradeQuote(
     quote: TradeQuoteData,
+    quoteVerifierAddress: string,  
     signer: ethers.Signer
 ): Promise<SignedTradeQuote> {
-    const domain = getEIP712Domain(quote.market);
+    const domain = getEIP712Domain(quoteVerifierAddress);
 
     const signature = await signer.signTypedData(domain, TRADE_QUOTE_TYPES, {
         trader: quote.trader,
@@ -156,10 +190,11 @@ export async function signTradeQuote(
         outcome: quote.outcome,
         amount: quote.amount.toString(),
         cost: quote.cost.toString(),
-        isSell: quote.isSell,
         deadline: quote.deadline,
         nonce: quote.nonce.toString(),
-        marketVersion: quote.marketVersion,
+        isSell: quote.isSell,
+        minAmountOut: quote.minAmountOut.toString(),  
+        minReturn: quote.minReturn.toString(),        
     });
 
     return {
@@ -173,17 +208,19 @@ export async function signTradeQuote(
  * Used server-side to ensure quote authenticity
  * 
  * @param quote - The trade quote
+ * @param quoteVerifierAddress - Address of QuoteVerifier contract
  * @param signature - The signature to verify
  * @param expectedSigner - Expected signer address
  * @returns True if signature is valid
  */
 export function verifyTradeQuoteSignature(
     quote: TradeQuoteData,
+    quoteVerifierAddress: string,  
     signature: string,
     expectedSigner: string
 ): boolean {
     try {
-        const domain = getEIP712Domain(quote.market);
+        const domain = getEIP712Domain(quoteVerifierAddress);
         
         const recovered = ethers.verifyTypedData(
             domain,
@@ -194,10 +231,11 @@ export function verifyTradeQuoteSignature(
                 outcome: quote.outcome,
                 amount: quote.amount.toString(),
                 cost: quote.cost.toString(),
-                isSell: quote.isSell,
                 deadline: quote.deadline,
                 nonce: quote.nonce.toString(),
-                marketVersion: quote.marketVersion,
+                isSell: quote.isSell,
+                minAmountOut: quote.minAmountOut.toString(),  
+                minReturn: quote.minReturn.toString(),        
             },
             signature
         );

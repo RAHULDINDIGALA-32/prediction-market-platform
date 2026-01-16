@@ -10,6 +10,8 @@ import { generateTradeQuote, signTradeQuote, isQuoteValid } from "@/lib/quoteGen
 import { ethers } from "ethers";
 import { Decimal } from "@prisma/client/runtime/library";
 
+const QUOTE_VERIFIER_ADDRESS = process.env.QUOTE_VERIFIER_ADDRESS;
+
 interface QuoteRequest {
     marketId: string;
     trader: string;
@@ -29,7 +31,8 @@ interface QuoteResponse {
         isSell: boolean;
         deadline: number;
         nonce: string;
-        marketVersion: number;
+        minAmountOut: string;    
+        minReturn: string;       
         signature: string;
     };
     error?: string;
@@ -48,10 +51,24 @@ const toBigInt = (value: Decimal) => BigInt(value.toString());
  * - amount: Token amount in wei (string)
  * - isSell: Buy (false) or sell (true)
  * 
- * Returns: Signed trade quote for on-chain execution
+ * Returns: Signed trade quote for on-chain execution with slippage protection fields
  */
 export async function POST(request: NextRequest): Promise<NextResponse<QuoteResponse>> {
     try {
+        if (!QUOTE_VERIFIER_ADDRESS) {
+            console.error(
+                "CRITICAL: QUOTE_VERIFIER_ADDRESS not configured in environment. " +
+                "This is required for correct EIP-712 signature generation."
+            );
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Quote service unavailable: Configuration error",
+                },
+                { status: 503 }
+            );
+        }
+
         const body: QuoteRequest = await request.json();
 
         // Validate required fields
@@ -78,16 +95,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             );
         }
 
-        // Parse amount
         let amount: bigint;
         try {
             amount = BigInt(body.amount);
             if (amount <= 0n) {
-                throw new Error("Invalid amount");
+                throw new Error("Amount must be greater than 0");
             }
-        } catch {
+            // Maximum reasonable trade size (1000 ETH)
+            const MAX_TRADE_SIZE = BigInt(10) ** BigInt(21);
+            if (amount > MAX_TRADE_SIZE) {
+                throw new Error("Trade amount exceeds maximum allowed size (1000 ETH)");
+            }
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Invalid amount value";
             return NextResponse.json(
-                { success: false, error: "Invalid amount value" },
+                { success: false, error: message },
                 { status: 400 }
             );
         }
@@ -156,9 +178,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             });
         }
 
-        // Generate unsigned quote
+        // Calculate default slippage protection (1% for buys, 1% for sells)
+        const minAmountOut = body.isSell ? 0n : (amount * 99n) / 100n;
+        const minReturn = !body.isSell ? 0n : (amount * 99n) / 100n;
+
         const quoteData = generateTradeQuote(
             market.contractAddress,
+            QUOTE_VERIFIER_ADDRESS,      
             body.trader,
             body.outcome,
             amount,
@@ -167,7 +193,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             toBigInt(market.qNo),
             toBigInt(market.b),
             traderNonce.lastNonce,
-            market.version
+            minAmountOut,                
+            minReturn                     
         );
 
         // Validate quote is still fresh
@@ -181,15 +208,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
         // Sign quote with backend oracle key
         const privateKey = process.env.ORACLE_PRIVATE_KEY;
         if (!privateKey) {
-            console.error("ORACLE_PRIVATE_KEY not configured");
+            console.error(
+                "CRITICAL: ORACLE_PRIVATE_KEY not configured in environment. " +
+                "This is the private key of the authorized quote signer."
+            );
             return NextResponse.json(
-                { success: false, error: "Oracle not configured" },
-                { status: 500 }
+                {
+                    success: false,
+                    error: "Quote service unavailable: Oracle not configured",
+                },
+                { status: 503 }
             );
         }
 
         const signer = new ethers.Wallet(privateKey);
-        const signedQuote = await signTradeQuote(quoteData, signer);
+        const signedQuote = await signTradeQuote(quoteData, QUOTE_VERIFIER_ADDRESS, signer);
 
         // Store signed quote for tracking
         await prisma.signedQuote.create({
@@ -198,17 +231,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
                 marketId: body.marketId,
                 quoteHash: ethers.keccak256(
                     ethers.AbiCoder.defaultAbiCoder().encode(
-                        ["address", "address", "uint8", "uint256", "uint256", "bool", "uint256", "uint256", "uint256"],
+                        [
+                            "address", "address", "uint8", "uint256", "uint256",
+                            "uint256", "uint256", "bool", "uint256", "uint256"
+                        ],
                         [
                             body.trader,
                             market.contractAddress,
                             body.outcome,
                             amount,
                             quoteData.cost,
-                            body.isSell,
                             quoteData.deadline,
                             quoteData.nonce,
-                            quoteData.marketVersion,
+                            body.isSell,
+                            quoteData.minAmountOut,   
+                            quoteData.minReturn       
                         ]
                     )
                 ),
@@ -218,6 +255,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
                 nonce: quoteData.nonce,
                 isSell: body.isSell,
                 marketVersion: market.version,
+                minAmountOut: new Decimal(quoteData.minAmountOut.toString()),  
+                minReturn: new Decimal(quoteData.minReturn.toString()),        
             },
         });
 
@@ -232,7 +271,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
                 isSell: signedQuote.isSell,
                 deadline: signedQuote.deadline,
                 nonce: signedQuote.nonce.toString(),
-                marketVersion: signedQuote.marketVersion,
+                minAmountOut: signedQuote.minAmountOut.toString(),  
+                minReturn: signedQuote.minReturn.toString(),        
                 signature: signedQuote.signature,
             },
         });
