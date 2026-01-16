@@ -2,11 +2,12 @@
  * @description In-memory cache for authorization state with TTL
  * 
  * Implements multi-tier caching strategy:
- * 1. L1: In-memory cache
- * 2. L2: Database cache
- * 3. L3: Contract calls 
+ * 1. L1: In-memory cache 
+ * 2. L2: Database cache 
+ * 3. L3: Contract calls (fallback only)
  * 
- * Reduces RPC calls from 100% to <5% in normal operation
+ * 
+ * Reduces RPC calls from 100% to <5% when using database cache
  */
 
 export interface CacheEntry<T> {

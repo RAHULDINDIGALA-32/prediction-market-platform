@@ -92,7 +92,9 @@ export async function isAuthorizedSigner(address: string): Promise<boolean> {
  * Check if an address is an authorized oracle resolver
  * 
  * Three-tier lookup with cache synchronization
- * Cache synced automatically every 1 minute from contract events
+ * Cache synced via:
+ * - Local: triggerAuthorizationSync() or API endpoint
+ * - Serverless Deployed: Cron Functions (configured in vercel.json)
  * 
  * @param address - Address to check
  * @returns true if resolver is authorized, false otherwise
@@ -210,7 +212,7 @@ export async function verifyWithContract(
 
 /**
  * Safe authorization check with fallback
- * 1. Check database cache (
+ * 1. Check database cache first
  * 2. If not found, verify against contract
  * 3. If verification succeeds, update database for future queries
  * 

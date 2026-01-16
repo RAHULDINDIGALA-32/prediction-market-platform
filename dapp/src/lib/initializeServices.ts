@@ -1,18 +1,17 @@
 /**
- * @description Initialize background services on app startup
+ * @description Initialize services on app startup
  * 
- * Called from layout.tsx to ensure:
- * - Authorization sync service starts automatically
- * - Cache is populated on first startup
- * - Metrics tracking begins
+ * NOTE: For serverless deployment(like Vercel), background services with setInterval won't work.
+ * Instead, use Vercel Cron Functions to trigger sync via API endpoint:
+ * 
  */
 
-import { initializeAuthSync } from "./authorizationSyncService";
+import { triggerAuthorizationSync } from "./authorizationSyncService";
 
 let isInitialized = false;
 
 /**
- * Initialize all background services
+ * Initialize all services
  * Safe to call multiple times (uses guard)
  */
 export async function initializeServices() {
@@ -21,15 +20,18 @@ export async function initializeServices() {
   }
 
   try {
-    console.log("🔧 Initializing background services...");
+    console.log("🔧 Initializing services...");
 
-    // Start authorization sync service
-    await initializeAuthSync();
+    // For local development, perform initial sync
+    if (process.env.NODE_ENV === "development") {
+      console.log("ℹ️  Local dev mode: Triggering initial authorization sync...");
+      await triggerAuthorizationSync();
+    }
 
     isInitialized = true;
-    console.log("✅ Background services initialized");
+    console.log("✅ Services initialized");
   } catch (error) {
-    console.error("❌ Failed to initialize background services:", error);
+    console.error("❌ Failed to initialize services:", error);
     // Continue anyway - services are optional for basic operation
   }
 }

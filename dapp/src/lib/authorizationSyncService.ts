@@ -3,12 +3,6 @@
  * 
  * Runs as background job with configurable interval (default: every 1 minute)
  * Automatically populates L1 cache on startup
- * 
- * Industry-grade features:
- * - Automatic retry with exponential backoff
- * - Error tracking and alerting
- * - Graceful degradation on RPC failures
- * - Metrics and monitoring
  */
 
 import { ethers } from "ethers";
@@ -87,45 +81,10 @@ export class AuthorizationSyncService {
   }
 
   /**
-   * Start the background sync service
-   * Performs initial sync, then schedules periodic syncs
-   */
-  async start() {
-    if (!this.config.enabled) {
-      console.log(" Authorization sync service is disabled");
-      return;
-    }
-
-    console.log("Starting Authorization Sync Service");
-    console.log(`   Interval: ${this.config.interval}ms`);
-    console.log(`   Max retries: ${this.config.maxRetries}`);
-
-    // Perform initial sync
-    await this.performSync(true);
-
-    // Schedule periodic syncs
-    this.syncTimer = setInterval(async () => {
-      await this.performSync(false);
-    }, this.config.interval);
-
-    console.log("Authorization sync service started");
-  }
-
-  /**
-   * Stop the background sync service
-   */
-  stop() {
-    if (this.syncTimer) {
-      clearInterval(this.syncTimer);
-      this.syncTimer = null;
-      console.log("⏹Authorization sync service stopped");
-    }
-  }
-
-  /**
    * Perform a sync cycle with retry logic
+   * Public method - can be called by Vercel Cron Functions or manually
    */
-  private async performSync(isInitial: boolean) {
+  async performSync(isInitial: boolean = false) {
     if (this.issyncing) {
       console.log("Sync already in progress, skipping...");
       return;
@@ -463,7 +422,12 @@ export function getSyncService(): AuthorizationSyncService {
   return syncService;
 }
 
-export function initializeAuthSync() {
+/**
+ * Trigger a manual sync cycle (for Vercel Cron Functions or API endpoints)
+ * Returns metrics about the sync operation
+ */
+export async function triggerAuthorizationSync(): Promise<SyncMetrics> {
   const service = getSyncService();
-  return service.start();
+  await service.performSync(false);
+  return service.getMetrics();
 }
