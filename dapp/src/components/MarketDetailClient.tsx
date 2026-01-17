@@ -78,6 +78,8 @@ interface Props {
 
 const ESTIMATED_GAS_COST = BigInt(150000); // Estimated gas units for a trade
 const GAS_PRICE_GWEI = BigInt(50); // Estimate 50 gwei
+const SCALE_GWEI = 1_000_000_000n;
+const SACLE_WEI = 1_000_000_000_000_000_000n;
 
 export default function MarketDetailClient({ market }: Props) {
   const { address } = useAccount();
@@ -144,7 +146,7 @@ export default function MarketDetailClient({ market }: Props) {
       // For buying: max they can afford with ETH (accounting for gas)
       if (!unsignedQuote || !unsignedQuote.quote?.cost) {
         // Estimate: (balance - gas cost) / average cost per token
-        const estimatedGasCost = (ESTIMATED_GAS_COST * GAS_PRICE_GWEI * BigInt(1e9)) / BigInt(1e18);
+        const estimatedGasCost = ESTIMATED_GAS_COST * GAS_PRICE_GWEI * SCALE_GWEI;
         const availableEth = ethBalance > estimatedGasCost ? ethBalance - estimatedGasCost : 0n;
         // Rough estimate: assume cost ≈ amount (conservative)
         return formatEth(availableEth / BigInt(2), 4).replace(" ETH", "");
@@ -162,8 +164,8 @@ export default function MarketDetailClient({ market }: Props) {
       const currentAmount = BigInt(unsignedQuote.quote.amount);
       if (currentAmount === 0n) return "0";
 
-      const costPerToken = quoteCost / currentAmount; // Wei per token
-      const maxTokens = availableEth / costPerToken;
+      const costPerToken = (quoteCost * SACLE_WEI) / currentAmount; // Wei per token
+      const maxTokens = (availableEth * SACLE_WEI) / costPerToken;
 
       return formatEth(maxTokens, 4).replace(" ETH", "");
     }
@@ -177,6 +179,9 @@ export default function MarketDetailClient({ market }: Props) {
   const amountBigInt = amount ? BigInt(Math.floor(Number(amount) * 1e18)) : 0n;
   const isAmountExceedsSellBalance = isSell && amountBigInt > selectedBalance;
   const isAmountExceedsEthBalance = !isSell && unsignedQuote && BigInt(unsignedQuote.quote.cost) > ethBalance;
+  console.log("Quote cost: ", unsignedQuote?.quote?.cost); 
+  console.log("Eth balance: ", ethBalance);
+  console.log("Amount exceeds sell balance: ", isAmountExceedsSellBalance);
 
   // Handle max button click
   const handleMaxClick = () => {
@@ -484,7 +489,7 @@ export default function MarketDetailClient({ market }: Props) {
             {isAmountExceedsEthBalance && !isSell && (
               <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-200">
                 <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                Insufficient ETH for this trade (includes gas). Require {formatEth(unsignedQuote.quote.cost, 3)}
+                Insufficient ETH for this trade (includes gas). Require {formatEth(BigInt(unsignedQuote.quote.cost), 4)}
               </div>
             )}
 
@@ -503,7 +508,7 @@ export default function MarketDetailClient({ market }: Props) {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-600 dark:text-zinc-400">{isSell ? "You receive" : "Cost"}:</span>
-                    <span className="font-semibold">{formatEth(unsignedQuote.quote.cost, 4)}</span>
+                    <span className="font-semibold">{formatEth(BigInt(unsignedQuote.quote.cost), 4)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-600 dark:text-zinc-400">Implied probability:</span>

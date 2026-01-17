@@ -27,7 +27,7 @@ const CHAIN_ID = (() => {
     return chainId;
 })();
 
-const QUOTE_DEADLINE_SECONDS = parseInt(process.env.QUOTE_DEADLINE_SECONDS || "300"); // 5 minutes default
+const QUOTE_DEADLINE_SECONDS = parseInt(process.env.NEXT_PUBLIC_QUOTE_DEADLINE_SECONDS || "300"); // 5 minutes default
 
 // Must match on-chain: QuoteVerifier.sol constructor
 function getEIP712Domain(quoteVerifierAddress: string) {

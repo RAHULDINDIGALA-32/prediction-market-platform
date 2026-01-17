@@ -7,7 +7,7 @@ Decimal.set({ precision: 80, rounding: Decimal.ROUND_HALF_UP });
 
 export function lmsrCost(qYes: bigint, qNo: bigint, b: bigint): bigint {
   // Convert inputs to Decimal using integer values interpreted as base units.
-  const qYesD = new Decimal(qYes.toString());
+  const qYesD = (new Decimal(qYes.toString()));
   const qNoD = new Decimal(qNo.toString());
   const bD = new Decimal(b.toString());
 
@@ -27,6 +27,7 @@ export function lmsrCost(qYes: bigint, qNo: bigint, b: bigint): bigint {
   const cost = bD.mul(lnSum);
 
   // Scale cost to fixed-point (SCALE) and return bigint
-  const scaled = cost.mul(SCALE).toFixed(0);
+  //const scaled = cost.mul(SCALE).toFixed(0); 
+  const scaled = cost.toFixed(0); // the input is already scaled
   return BigInt(scaled);
 }
