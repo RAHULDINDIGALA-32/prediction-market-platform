@@ -9,11 +9,11 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useMarketInfo, useMarketProbabilities, useUserPositions } from "@/hooks/useMarketData";
-import { useQuote } from "@/hooks/useQuote";
+import { useMarketInfo, useMarketProbabilities, useUserPositions, useEthBalance } from "@/hooks/useMarketData";
+import { useUnsignedQuote, signQuote } from "@/hooks/useQuote";
 import { calculateProbability, formatEth, formatTimeRemaining, formatAddress } from "@/lib/utils";
 import { parseContractError } from "@/lib/errors";
-import { AlertTriangle, Clock, TrendingUp, TrendingDown } from "lucide-react";
+import { AlertTriangle, Clock, TrendingUp, TrendingDown, AlertCircle, Wallet } from "lucide-react";
 import TradeConfirmationModal from "@/components/TradeConfirmationModal";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 
@@ -76,19 +76,23 @@ interface Props {
   market: Market;
 }
 
+const ESTIMATED_GAS_COST = BigInt(150000); // Estimated gas units for a trade
+const GAS_PRICE_GWEI = BigInt(50); // Estimate 50 gwei
+
 export default function MarketDetailClient({ market }: Props) {
   const { address } = useAccount();
   const [side, setSide] = useState<"YES" | "NO">("YES");
-  const [amount, setAmount] = useState("1");
+  const [amount, setAmount] = useState("");
   const [isSell, setIsSell] = useState(false);
-  const [slippage, setSlippage] = useState("1");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [pendingQuote, setPendingQuote] = useState<any>(null);
+  const [pendingUnsignedQuote, setPendingUnsignedQuote] = useState<any>(null);
+  const [signingError, setSigningError] = useState<string | null>(null);
+  const [isSigningQuote, setIsSigningQuote] = useState(false);
 
   const marketAddress = market.contractAddress as `0x${string}` | undefined;
   const { data: marketInfo } = useMarketInfo(marketAddress);
-  
-  // Get token addresses from market info (tuple: [state, endTime, yesToken, noToken, vault, isExpired, isClosed])
+
+  // Get token addresses from market info
   const yesToken = marketInfo?.[2] as `0x${string}` | undefined;
   const noToken = marketInfo?.[3] as `0x${string}` | undefined;
   const endTime = marketInfo?.[1];
@@ -100,93 +104,164 @@ export default function MarketDetailClient({ market }: Props) {
   );
 
   const positions = useUserPositions(address, yesToken, noToken);
+  const { balance: ethBalance } = useEthBalance(address);
 
   const displayProbs = probabilities || calculateProbability(market.qYes, market.qNo);
 
-  // Request quote
+  // Request unsigned quote only when amount > 0
   const quoteRequest = address && amount && Number(amount) > 0
     ? {
         marketId: market.id,
         trader: address,
         side,
-        amount,
+        amount: (BigInt(Math.floor(Number(amount) * 1e18))).toString(),
         isSell,
       }
     : null;
 
-  const { quote, error: quoteError, isLoading: quoteLoading, secondsRemaining, isExpired, refetch } = useQuote(quoteRequest);
+  const { quote: unsignedQuote, error: quoteError, isLoading: quoteLoading, secondsRemaining, isExpired, refetch } = useUnsignedQuote(quoteRequest);
 
   // Auto-refresh quote every 10 seconds
   useEffect(() => {
-    if (!quote || isExpired) return;
+    if (!unsignedQuote || isExpired) return;
     const interval = setInterval(() => {
       refetch();
     }, 10000);
     return () => clearInterval(interval);
-  }, [quote, isExpired, refetch]);
+  }, [unsignedQuote, isExpired, refetch]);
 
   const { writeContractAsync, isPending: isWriting } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
-    hash: undefined, // Will be set when transaction is submitted
-  });
 
-  const handleTrade = async () => {
-    if (!quote || !address) return;
+  // Calculate max buyable / sellable
+  const calculateMaxAmount = (): string => {
+    if (!address) return "0";
 
-    setPendingQuote(quote);
+    if (isSell) {
+      // For selling: total tokens they have
+      const tokenBalance = side === "YES" ? positions.yesBalance : positions.noBalance;
+      return formatEth(tokenBalance, 4).replace(" ETH", "");
+    } else {
+      // For buying: max they can afford with ETH (accounting for gas)
+      if (!unsignedQuote || !unsignedQuote.quote?.cost) {
+        // Estimate: (balance - gas cost) / average cost per token
+        const estimatedGasCost = (ESTIMATED_GAS_COST * GAS_PRICE_GWEI * BigInt(1e9)) / BigInt(1e18);
+        const availableEth = ethBalance > estimatedGasCost ? ethBalance - estimatedGasCost : 0n;
+        // Rough estimate: assume cost ≈ amount (conservative)
+        return formatEth(availableEth / BigInt(2), 4).replace(" ETH", "");
+      }
+
+      // Actual calculation with current quote cost
+      const quoteCost = BigInt(unsignedQuote.quote.cost);
+      const estimatedGasCost = (ESTIMATED_GAS_COST * GAS_PRICE_GWEI * BigInt(1e9)) / BigInt(1e18);
+      const availableEth = ethBalance > estimatedGasCost ? ethBalance - estimatedGasCost : 0n;
+
+      if (availableEth === 0n) return "0";
+
+      // Max tokens = available ETH / cost per token
+      // If amount * cost = totalCost, then max_amount = available_eth / (cost / amount)
+      const currentAmount = BigInt(unsignedQuote.quote.amount);
+      if (currentAmount === 0n) return "0";
+
+      const costPerToken = quoteCost / currentAmount; // Wei per token
+      const maxTokens = availableEth / costPerToken;
+
+      return formatEth(maxTokens, 4).replace(" ETH", "");
+    }
+  };
+
+  // Validation checks
+  const yesBalance = positions.yesBalance;
+  const noBalance = positions.noBalance;
+  const selectedBalance = side === "YES" ? yesBalance : noBalance;
+
+  const amountBigInt = amount ? BigInt(Math.floor(Number(amount) * 1e18)) : 0n;
+  const isAmountExceedsSellBalance = isSell && amountBigInt > selectedBalance;
+  const isAmountExceedsEthBalance = !isSell && unsignedQuote && BigInt(unsignedQuote.quote.cost) > ethBalance;
+
+  // Handle max button click
+  const handleMaxClick = () => {
+    const maxAmount = calculateMaxAmount();
+    setAmount(maxAmount);
+  };
+
+  // Handle amount change
+  const handleAmountChange = (value: string) => {
+    // Only allow numbers and decimals
+    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+      setAmount(value);
+    }
+  };
+
+  // Handle trade confirmation
+  const handleTradeClick = async () => {
+    if (!unsignedQuote || !address) return;
+
+    setPendingUnsignedQuote(unsignedQuote);
     setShowConfirmModal(true);
   };
 
+  // Execute trade after signing
   const executeTrade = async () => {
-    if (!pendingQuote || !address) return;
+    if (!pendingUnsignedQuote || !address) return;
 
     try {
+      setIsSigningQuote(true);
+      setSigningError(null);
+
+      // Step 1: Sign the quote
+      const signedQuote = await signQuote(pendingUnsignedQuote, market.id);
+
+      // Step 2: Execute on-chain transaction
       const quoteStruct = {
-        trader: pendingQuote.quote.trader as `0x${string}`,
-        market: pendingQuote.quote.market as `0x${string}`,
-        outcome: pendingQuote.quote.outcome as 0 | 1,
-        amount: BigInt(pendingQuote.quote.amount),
-        cost: BigInt(pendingQuote.quote.cost),
-        deadline: BigInt(pendingQuote.quote.deadline),
-        nonce: BigInt(pendingQuote.quote.nonce),
-        isSell: pendingQuote.quote.isSell,
-        minAmountOut: BigInt(pendingQuote.quote.minAmountOut ?? 0),
-        minReturn: BigInt(pendingQuote.quote.minReturn ?? 0),
+        trader: signedQuote.quote.trader as `0x${string}`,
+        market: signedQuote.quote.market as `0x${string}`,
+        outcome: signedQuote.quote.outcome as 0 | 1,
+        amount: BigInt(signedQuote.quote.amount),
+        cost: BigInt(signedQuote.quote.cost),
+        deadline: BigInt(signedQuote.quote.deadline),
+        nonce: BigInt(signedQuote.quote.nonce),
+        isSell: signedQuote.quote.isSell,
+        minAmountOut: BigInt(signedQuote.quote.minAmountOut ?? 0),
+        minReturn: BigInt(signedQuote.quote.minReturn ?? 0),
       };
 
-      const value = pendingQuote.quote.isSell ? 0n : BigInt(pendingQuote.quote.cost);
+      const value = signedQuote.quote.isSell ? 0n : BigInt(signedQuote.quote.cost);
 
       await writeContractAsync({
-        address: pendingQuote.quote.market as `0x${string}`,
+        address: signedQuote.quote.market as `0x${string}`,
         abi: MARKET_ABI,
         functionName: "executeTrade",
         args: [
           quoteStruct,
-          pendingQuote.signature as `0x${string}`,
-          BigInt(pendingQuote.quote.minAmountOut ?? 0),
-          BigInt(pendingQuote.quote.minReturn ?? 0),
+          signedQuote.signature as `0x${string}`,
+          BigInt(signedQuote.quote.minAmountOut ?? 0),
+          BigInt(signedQuote.quote.minReturn ?? 0),
         ],
         value,
       });
 
       setShowConfirmModal(false);
+      setAmount("");
+
       // Refetch data after successful trade
       setTimeout(() => {
         window.location.reload();
       }, 2000);
     } catch (error: any) {
       console.error("Trade execution failed:", error);
-      // Error will be shown via wagmi's error handling
+      setSigningError(error.message || "Trade execution failed");
+    } finally {
+      setIsSigningQuote(false);
     }
   };
 
-  const impliedProbability = quote
-    ? Number(quote.quote.cost) / (Number(quote.quote.amount) + Number(quote.quote.cost))
+  const impliedProbability = unsignedQuote && unsignedQuote.quote
+    ? Number(unsignedQuote.quote.cost) / (Number(unsignedQuote.quote.amount) + Number(unsignedQuote.quote.cost))
     : displayProbs.yes;
 
   const isMarketOpen = market.status === "OPEN";
-  const isMarketClosingSoon = marketInfo && endTime 
-    ? Number(endTime) * 1000 - Date.now() < 3600000 // 1 hour
+  const isMarketClosingSoon = endTime
+    ? Number(endTime) * 1000 - Date.now() < 3600000
     : false;
 
   return (
@@ -304,6 +379,36 @@ export default function MarketDetailClient({ market }: Props) {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Wallet Balance Display */}
+            {address && (
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 dark:bg-blue-900/20 dark:border-blue-800 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-blue-800 dark:text-blue-200">
+                  <Wallet className="h-4 w-4" />
+                  Your Balance
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <div className="text-blue-700 dark:text-blue-300 mb-1">ETH</div>
+                    <div className="font-semibold text-blue-900 dark:text-blue-100">
+                      {formatEth(ethBalance, 4)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-blue-700 dark:text-blue-300 mb-1">YES Tokens</div>
+                    <div className="font-semibold text-blue-900 dark:text-blue-100">
+                      {formatEth(yesBalance, 2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-blue-700 dark:text-blue-300 mb-1">NO Tokens</div>
+                    <div className="font-semibold text-blue-900 dark:text-blue-100">
+                      {formatEth(noBalance, 2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Side Toggle */}
             <div className="grid grid-cols-2 gap-2">
               <Button
@@ -322,38 +427,6 @@ export default function MarketDetailClient({ market }: Props) {
               </Button>
             </div>
 
-            {/* Amount Input */}
-            <div>
-              <Label htmlFor="amount">Amount (tokens)</Label>
-              <div className="flex gap-2 mt-1">
-                <Input
-                  id="amount"
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  disabled={!isMarketOpen}
-                  min="0"
-                  step="0.1"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    // Set max based on balance if selling
-                    if (isSell) {
-                      const balance = side === "YES" ? positions?.yesBalance : positions?.noBalance;
-                      if (balance) {
-                        setAmount(formatEth(balance, 4).replace(" ETH", ""));
-                      }
-                    }
-                  }}
-                  disabled={!isMarketOpen}
-                >
-                  Max
-                </Button>
-              </div>
-            </div>
-
             {/* Buy/Sell Toggle */}
             <div className="flex items-center gap-2">
               <input
@@ -364,13 +437,59 @@ export default function MarketDetailClient({ market }: Props) {
                 disabled={!isMarketOpen}
                 className="h-4 w-4 rounded border-zinc-300"
               />
-              <Label htmlFor="isSell" className="cursor-pointer">
-                Sell instead of buy
+              <Label htmlFor="isSell" className="cursor-pointer text-sm">
+                Sell {side} tokens
               </Label>
             </div>
 
-            {/* Real-Time Quote Box */}
-            {quote && !isExpired && (
+            {/* Amount Input */}
+            <div>
+              <Label htmlFor="amount" className="text-sm">
+                Amount ({side === "YES" ? "YES" : "NO"} tokens)
+              </Label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  id="amount"
+                  type="text"
+                  value={amount}
+                  onChange={(e) => handleAmountChange(e.target.value)}
+                  placeholder="0.0"
+                  disabled={!isMarketOpen}
+                  className="flex-1"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleMaxClick}
+                  disabled={!isMarketOpen || !address}
+                  className="min-w-max"
+                >
+                  Max
+                </Button>
+              </div>
+              {isSell && selectedBalance > 0n && (
+                <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                  Available: {formatEth(selectedBalance, 4)}
+                </div>
+              )}
+            </div>
+
+            {/* Validation Errors */}
+            {isAmountExceedsSellBalance && (
+              <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-200">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                Insufficient {side} balance
+              </div>
+            )}
+            {isAmountExceedsEthBalance && !isSell && (
+              <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-200">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                Insufficient ETH for this trade (includes gas). Require {formatEth(unsignedQuote.quote.cost, 3)}
+              </div>
+            )}
+
+            {/* Quote Preview */}
+            {unsignedQuote && !isExpired && !isAmountExceedsSellBalance && !isAmountExceedsEthBalance && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -384,11 +503,15 @@ export default function MarketDetailClient({ market }: Props) {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-600 dark:text-zinc-400">{isSell ? "You receive" : "Cost"}:</span>
-                    <span className="font-semibold">{formatEth(quote.quote.cost, 4)}</span>
+                    <span className="font-semibold">{formatEth(unsignedQuote.quote.cost, 4)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-600 dark:text-zinc-400">Implied probability:</span>
                     <span className="font-semibold">{Math.round(impliedProbability * 100)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-600 dark:text-zinc-400">Slippage protection:</span>
+                    <span className="font-semibold">1%</span>
                   </div>
                   {secondsRemaining !== null && (
                     <div className="flex items-center justify-between pt-2 border-t border-zinc-200 dark:border-zinc-800">
@@ -396,7 +519,9 @@ export default function MarketDetailClient({ market }: Props) {
                         <Clock className="h-3 w-3" />
                         Quote expires in:
                       </span>
-                      <span className="text-xs font-semibold">{secondsRemaining}s</span>
+                      <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                        {secondsRemaining}s
+                      </span>
                     </div>
                   )}
                 </div>
@@ -404,10 +529,10 @@ export default function MarketDetailClient({ market }: Props) {
             )}
 
             {/* Warnings */}
-            {isExpired && (
+            {isExpired && !isAmountExceedsSellBalance && (
               <div className="flex items-center gap-2 rounded-lg bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-200">
                 <AlertTriangle className="h-4 w-4" />
-                Quote expired. Please refresh.
+                Quote expired. Please adjust amount to refresh.
               </div>
             )}
             {isMarketClosingSoon && (
@@ -418,26 +543,39 @@ export default function MarketDetailClient({ market }: Props) {
             )}
             {quoteError && (
               <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-200">
-                {parseContractError(quoteError)}
+                {parseContractError(quoteError.message)}
+              </div>
+            )}
+            {signingError && (
+              <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-200">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                {signingError}
               </div>
             )}
 
             {/* Trade Button */}
             <Button
-              onClick={handleTrade}
-              disabled={!isMarketOpen || !quote || isExpired || quoteLoading || isWriting || isConfirming}
+              onClick={handleTradeClick}
+              disabled={
+                !isMarketOpen ||
+                !unsignedQuote ||
+                isExpired ||
+                quoteLoading ||
+                isAmountExceedsSellBalance ||
+                isAmountExceedsEthBalance ||
+                !amount ||
+                isWriting
+              }
               className="w-full"
             >
               {quoteLoading
-                ? "Requesting quote..."
-                : isWriting
-                ? "Signing transaction..."
-                : isConfirming
-                ? "Confirming..."
+                ? "Getting quote..."
                 : isExpired
                 ? "Quote Expired"
-                : !quote
+                : !unsignedQuote
                 ? "Enter amount"
+                : isAmountExceedsSellBalance || isAmountExceedsEthBalance
+                ? "Insufficient Balance"
                 : "Review Trade"}
             </Button>
 
@@ -492,21 +630,27 @@ export default function MarketDetailClient({ market }: Props) {
       </Card>
 
       {/* Trade Confirmation Modal */}
-      {showConfirmModal && pendingQuote && (
+      {showConfirmModal && pendingUnsignedQuote && (
         <TradeConfirmationModal
-          quote={pendingQuote}
+          quote={{
+            quote: {
+              ...pendingUnsignedQuote.quote,
+              marketId: market.id,
+            },
+            signature: "", // Will be generated during execution
+          }}
           side={side}
           amount={amount}
           isSell={isSell}
           onConfirm={executeTrade}
           onCancel={() => {
             setShowConfirmModal(false);
-            setPendingQuote(null);
+            setPendingUnsignedQuote(null);
+            setSigningError(null);
           }}
-          isPending={isWriting || isConfirming}
+          isPending={isSigningQuote || isWriting}
         />
       )}
     </div>
   );
 }
-

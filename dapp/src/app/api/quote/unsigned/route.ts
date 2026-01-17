@@ -1,19 +1,18 @@
 /**
- * @file api/quote.ts
- * @description Trade quote generation endpoint
- * Generates LMSR-based quotes signed by the backend oracle
+ * @description Unsigned quote generation endpoint (query preview)
+ * Generates LMSR-based quotes WITHOUT signing - for preview/display only
+ * Actual signing happens at trade confirmation time via /api/quote/sign
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { generateTradeQuote, signTradeQuote, isQuoteValid } from "@/lib/quoteGeneration";
-import { getSignerWallet, listAuthorizedSigners } from "@/lib/signerManagement";
+import { generateTradeQuote, isQuoteValid } from "@/lib/quoteGeneration";
 import { ethers } from "ethers";
 import { Decimal } from "@prisma/client/runtime/library";
 
 const QUOTE_VERIFIER_ADDRESS = process.env.NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS;
 
-interface QuoteRequest {
+interface UnsignedQuoteRequest {
     marketId: string;
     trader: string;
     outcome: 0 | 1; // 0 = YES, 1 = NO
@@ -21,7 +20,7 @@ interface QuoteRequest {
     isSell: boolean;
 }
 
-interface QuoteResponse {
+interface UnsignedQuoteResponse {
     success: boolean;
     quote?: {
         trader: string;
@@ -32,29 +31,56 @@ interface QuoteResponse {
         isSell: boolean;
         deadline: number;
         nonce: string;
-        minAmountOut: string;    
-        minReturn: string;       
-        signature: string;
+        minAmountOut: string;
+        minReturn: string;
+        marketVersion: number;
     };
     error?: string;
 }
 
-const toBigInt = (value: Decimal) => BigInt(value.toString());
+/**
+ * Convert Prisma Decimal to BigInt, scaling by 10^18 for wei precision
+ * This handles decimal values from the database like 0.721348
+ * and converts them to proper wei-scale integers
+ */
+const toBigInt = (value: Decimal): bigint => {
+    const str = value.toString();
+    
+    // If value is a decimal (e.g., 0.721348), scale it by 10^18
+    if (str.includes('.')) {
+        const parts = str.split('.');
+        const integerPart = parts[0];
+        const decimalPart = parts[1];
+        
+        // Pad decimal part to 18 places (wei precision)
+        const paddedDecimal = decimalPart.padEnd(18, '0').slice(0, 18);
+        const scaledString = integerPart + paddedDecimal;
+        
+        return BigInt(scaledString);
+    }
+    
+    // If already an integer, scale it by 10^18
+    return BigInt(str) * BigInt(10) ** BigInt(18);
+};
 
 /**
- * POST /api/quote
- * Generate a signed LMSR quote for a trade
- * 
+ * POST /api/quote/unsigned
+ * Generate an UNSIGNED LMSR quote for preview/display
+ *
+ * This endpoint generates a quote structure suitable for EIP-712 signing,
+ * but does NOT sign it. The signature is added later via /api/quote/sign
+ * when the user confirms the trade.
+ *
  * Required body:
  * - marketId: ID of the market
  * - trader: Trader's wallet address
  * - outcome: 0 (YES) or 1 (NO)
  * - amount: Token amount in wei (string)
  * - isSell: Buy (false) or sell (true)
- * 
- * Returns: Signed trade quote for on-chain execution with slippage protection fields
+ *
+ * Returns: Unsigned trade quote (ready for EIP-712 signing) - NO signature included
  */
-export async function POST(request: NextRequest): Promise<NextResponse<QuoteResponse>> {
+export async function POST(request: NextRequest): Promise<NextResponse<UnsignedQuoteResponse>> {
     try {
         if (!QUOTE_VERIFIER_ADDRESS) {
             console.error(
@@ -70,7 +96,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             );
         }
 
-        const body: QuoteRequest = await request.json();
+        const body: UnsignedQuoteRequest = await request.json();
 
         // Validate required fields
         if (!body.marketId || !body.trader || body.outcome === undefined || !body.amount) {
@@ -102,7 +128,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             if (amount <= 0n) {
                 throw new Error("Amount must be greater than 0");
             }
-            // Maximum reasonable trade size (1000 ETH)
+            // Maximum reasonable trade size (1000 ETH worth)
             const MAX_TRADE_SIZE = BigInt(10) ** BigInt(21);
             if (amount > MAX_TRADE_SIZE) {
                 throw new Error("Trade amount exceeds maximum allowed size (1000 ETH)");
@@ -122,7 +148,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
                 contractAddress: true,
                 qYes: true,
                 qNo: true,
-                lmsrB: true, // Use creator-specified LMSR parameter
+                lmsrB: true,
                 version: true,
                 status: true,
                 endTime: true,
@@ -183,19 +209,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
         const minAmountOut = body.isSell ? 0n : (amount * 99n) / 100n;
         const minReturn = !body.isSell ? 0n : (amount * 99n) / 100n;
 
+        // Generate UNSIGNED quote
         const quoteData = generateTradeQuote(
             market.contractAddress,
-            QUOTE_VERIFIER_ADDRESS,      
+            QUOTE_VERIFIER_ADDRESS,
             body.trader,
             body.outcome,
             amount,
             body.isSell,
             toBigInt(market.qYes),
             toBigInt(market.qNo),
-            toBigInt(market.lmsrB), // Use creator-specified lmsrB
+            toBigInt(market.lmsrB),
             traderNonce.lastNonce,
-            minAmountOut,                
-            minReturn                     
+            minAmountOut,
+            minReturn
         );
 
         // Validate quote is still fresh
@@ -206,101 +233,28 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             );
         }
 
-        // Get list of authorized signers from database
-        const authorizedSigners = await listAuthorizedSigners();
-        
-        if (!authorizedSigners || authorizedSigners.length === 0) {
-            console.error(
-                "CRITICAL: No authorized signers configured in database. " +
-                "Add signers via /api/admin/signers endpoint."
-            );
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: "Quote service unavailable: No authorized signers",
+        // Return unsigned quote (no signature, no database storage)
+        return NextResponse.json(
+            {
+                success: true,
+                quote: {
+                    trader: quoteData.trader,
+                    market: quoteData.market,
+                    outcome: quoteData.outcome,
+                    amount: quoteData.amount.toString(),
+                    cost: quoteData.cost.toString(),
+                    isSell: quoteData.isSell,
+                    deadline: quoteData.deadline,
+                    nonce: quoteData.nonce.toString(),
+                    minAmountOut: quoteData.minAmountOut.toString(),
+                    minReturn: quoteData.minReturn.toString(),
+                    marketVersion: market.version,
                 },
-                { status: 503 }
-            );
-        }
-
-        // Choose random signer from authorized signers
-        const randomSignerIndex = Math.floor(Math.random() * authorizedSigners.length);
-        const selectedSigner = authorizedSigners[randomSignerIndex];
-
-        // Get decrypted signer wallet
-        const wallet = await getSignerWallet(selectedSigner.address);
-        
-        if (!wallet) {
-            console.error(
-                `CRITICAL: Failed to get wallet for authorized signer ${selectedSigner.address}. ` +
-                "Check encryption key and private key storage."
-            );
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: "Quote service unavailable: Signer access failed",
-                },
-                { status: 503 }
-            );
-        }
-
-        // Sign quote with selected signer from database
-        const signedQuote = await signTradeQuote(quoteData, QUOTE_VERIFIER_ADDRESS, wallet);
-
-        // Store signed quote for tracking
-        await prisma.signedQuote.create({
-            data: {
-                trader: body.trader,
-                marketId: body.marketId,
-                quoteHash: ethers.keccak256(
-                    ethers.AbiCoder.defaultAbiCoder().encode(
-                        [
-                            "address", "address", "uint8", "uint256", "uint256",
-                            "uint256", "uint256", "bool", "uint256", "uint256"
-                        ],
-                        [
-                            body.trader,
-                            market.contractAddress,
-                            body.outcome,
-                            amount,
-                            quoteData.cost,
-                            quoteData.deadline,
-                            quoteData.nonce,
-                            body.isSell,
-                            quoteData.minAmountOut,   
-                            quoteData.minReturn       
-                        ]
-                    )
-                ),
-                signature: signedQuote.signature,
-                amount: new Decimal(amount.toString()),
-                cost: new Decimal(quoteData.cost.toString()),
-                nonce: quoteData.nonce,
-                isSell: body.isSell,
-                marketVersion: market.version,
-                minAmountOut: new Decimal(quoteData.minAmountOut.toString()),  
-                minReturn: new Decimal(quoteData.minReturn.toString()),        
             },
-        });
-
-        return NextResponse.json({
-            success: true,
-            quote: {
-                trader: signedQuote.trader,
-                market: signedQuote.market,
-                outcome: signedQuote.outcome,
-                amount: signedQuote.amount.toString(),
-                cost: signedQuote.cost.toString(),
-                isSell: signedQuote.isSell,
-                deadline: signedQuote.deadline,
-                nonce: signedQuote.nonce.toString(),
-                minAmountOut: signedQuote.minAmountOut.toString(),  
-                minReturn: signedQuote.minReturn.toString(),        
-                signature: signedQuote.signature,
-            },
-        });
+            { headers: { "Cache-Control": "no-store" } }
+        );
     } catch (error) {
-        console.error("Quote generation error:", error);
+        console.error("Unsigned quote generation error:", error);
         return NextResponse.json(
             {
                 success: false,

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useReadContract, useReadContracts } from "wagmi";
+import { useReadContract, useReadContracts, useBalance } from "wagmi";
 import { formatEther } from "viem";
 import { calculateProbability } from "@/lib/utils";
 
@@ -129,6 +129,24 @@ export function useUserPositions(
     ...rest,
     yesBalance: data?.[0]?.result ?? 0n,
     noBalance: data?.[1]?.result ?? 0n,
+  };
+}
+
+/**
+ * Hook to fetch ETH balance for a wallet address
+ * Returns balance in wei
+ */
+export function useEthBalance(userAddress?: `0x${string}`) {
+  const { data, ...rest } = useBalance({
+    address: userAddress,
+    query: {
+      enabled: !!userAddress,
+    },
+  });
+
+  return {
+    ...rest,
+    balance: data?.value ?? 0n,
   };
 }
 

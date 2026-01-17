@@ -1,27 +1,30 @@
 /**
- * @file api/quote.ts
- * @description Trade quote generation endpoint
- * Generates LMSR-based quotes signed by the backend oracle
+ * @description Quote signing endpoint (called on trade confirmation)
+ * Signs pre-generated quotes using authorized signers from database
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { generateTradeQuote, signTradeQuote, isQuoteValid } from "@/lib/quoteGeneration";
+import { signTradeQuote, isQuoteValid } from "@/lib/quoteGeneration";
 import { getSignerWallet, listAuthorizedSigners } from "@/lib/signerManagement";
 import { ethers } from "ethers";
 import { Decimal } from "@prisma/client/runtime/library";
 
-const QUOTE_VERIFIER_ADDRESS = process.env.NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS;
-
-interface QuoteRequest {
+interface SignQuoteRequest {
     marketId: string;
     trader: string;
-    outcome: 0 | 1; // 0 = YES, 1 = NO
+    outcome: 0 | 1;
     amount: string; // Wei as string
+    cost: string; // Wei as string
+    deadline: number;
+    nonce: string;
     isSell: boolean;
+    minAmountOut: string;
+    minReturn: string;
+    marketVersion: number;
 }
 
-interface QuoteResponse {
+interface SignedQuoteResponse {
     success: boolean;
     quote?: {
         trader: string;
@@ -32,30 +35,29 @@ interface QuoteResponse {
         isSell: boolean;
         deadline: number;
         nonce: string;
-        minAmountOut: string;    
-        minReturn: string;       
+        minAmountOut: string;
+        minReturn: string;
         signature: string;
     };
     error?: string;
 }
 
-const toBigInt = (value: Decimal) => BigInt(value.toString());
-
 /**
- * POST /api/quote
- * Generate a signed LMSR quote for a trade
- * 
- * Required body:
- * - marketId: ID of the market
- * - trader: Trader's wallet address
- * - outcome: 0 (YES) or 1 (NO)
- * - amount: Token amount in wei (string)
- * - isSell: Buy (false) or sell (true)
- * 
- * Returns: Signed trade quote for on-chain execution with slippage protection fields
+ * POST /api/quote/sign
+ * Sign a pre-generated LMSR quote using an authorized backend signer
+ *
+ * This endpoint is called when the user confirms a trade.
+ * It takes an unsigned quote structure and signs it using a random
+ * authorized signer from the database.
+ *
+ * Required body: Complete unsigned quote data (from /api/quote/unsigned)
+ *
+ * Returns: Signed quote ready for on-chain execution
  */
-export async function POST(request: NextRequest): Promise<NextResponse<QuoteResponse>> {
+export async function POST(request: NextRequest): Promise<NextResponse<SignedQuoteResponse>> {
     try {
+        const QUOTE_VERIFIER_ADDRESS = process.env.NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS;
+
         if (!QUOTE_VERIFIER_ADDRESS) {
             console.error(
                 "CRITICAL: NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS not configured in environment. " +
@@ -70,10 +72,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             );
         }
 
-        const body: QuoteRequest = await request.json();
+        const body: SignQuoteRequest = await request.json();
 
         // Validate required fields
-        if (!body.marketId || !body.trader || body.outcome === undefined || !body.amount) {
+        if (
+            !body.marketId ||
+            !body.trader ||
+            body.outcome === undefined ||
+            !body.amount ||
+            !body.cost ||
+            !body.nonce
+        ) {
             return NextResponse.json(
                 { success: false, error: "Missing required fields" },
                 { status: 400 }
@@ -96,36 +105,32 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             );
         }
 
-        let amount: bigint;
+        // Validate numeric values
+        let amount: bigint, cost: bigint, nonce: bigint;
         try {
             amount = BigInt(body.amount);
-            if (amount <= 0n) {
-                throw new Error("Amount must be greater than 0");
-            }
-            // Maximum reasonable trade size (1000 ETH)
-            const MAX_TRADE_SIZE = BigInt(10) ** BigInt(21);
-            if (amount > MAX_TRADE_SIZE) {
-                throw new Error("Trade amount exceeds maximum allowed size (1000 ETH)");
+            cost = BigInt(body.cost);
+            nonce = BigInt(body.nonce);
+
+            if (amount <= 0n || cost < 0n) {
+                throw new Error("Amount must be positive, cost must be non-negative");
             }
         } catch (err) {
-            const message = err instanceof Error ? err.message : "Invalid amount value";
+            const message = err instanceof Error ? err.message : "Invalid numeric values";
             return NextResponse.json(
                 { success: false, error: message },
                 { status: 400 }
             );
         }
 
-        // Fetch market
+        // Fetch market to verify it exists and is open
         const market = await prisma.market.findUnique({
             where: { id: body.marketId },
             select: {
                 contractAddress: true,
-                qYes: true,
-                qNo: true,
-                lmsrB: true, // Use creator-specified LMSR parameter
-                version: true,
                 status: true,
                 endTime: true,
+                version: true,
             },
         });
 
@@ -133,13 +138,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             return NextResponse.json(
                 { success: false, error: "Market not found" },
                 { status: 404 }
-            );
-        }
-
-        if (!market.contractAddress) {
-            return NextResponse.json(
-                { success: false, error: "Market not yet deployed on-chain" },
-                { status: 400 }
             );
         }
 
@@ -159,56 +157,28 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             );
         }
 
-        // Get or create trader nonce
-        let traderNonce = await prisma.traderNonce.findUnique({
-            where: {
-                trader_marketId: {
-                    trader: body.trader,
-                    marketId: body.marketId,
+        // Verify market version matches (prevents stale quote exploitation)
+        if (body.marketVersion !== market.version) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Quote uses stale market version (market state has changed)",
                 },
-            },
-        });
-
-        if (!traderNonce) {
-            traderNonce = await prisma.traderNonce.create({
-                data: {
-                    trader: body.trader,
-                    marketId: body.marketId,
-                    lastNonce: BigInt(0),
-                },
-            });
+                { status: 400 }
+            );
         }
 
-        // Calculate default slippage protection (1% for buys, 1% for sells)
-        const minAmountOut = body.isSell ? 0n : (amount * 99n) / 100n;
-        const minReturn = !body.isSell ? 0n : (amount * 99n) / 100n;
-
-        const quoteData = generateTradeQuote(
-            market.contractAddress,
-            QUOTE_VERIFIER_ADDRESS,      
-            body.trader,
-            body.outcome,
-            amount,
-            body.isSell,
-            toBigInt(market.qYes),
-            toBigInt(market.qNo),
-            toBigInt(market.lmsrB), // Use creator-specified lmsrB
-            traderNonce.lastNonce,
-            minAmountOut,                
-            minReturn                     
-        );
-
-        // Validate quote is still fresh
-        if (!isQuoteValid(quoteData)) {
+        // Verify quote is still valid (deadline hasn't passed)
+        if (body.deadline * 1000 < Date.now()) {
             return NextResponse.json(
-                { success: false, error: "Generated quote already expired" },
-                { status: 500 }
+                { success: false, error: "Quote has expired" },
+                { status: 400 }
             );
         }
 
         // Get list of authorized signers from database
         const authorizedSigners = await listAuthorizedSigners();
-        
+
         if (!authorizedSigners || authorizedSigners.length === 0) {
             console.error(
                 "CRITICAL: No authorized signers configured in database. " +
@@ -229,7 +199,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
 
         // Get decrypted signer wallet
         const wallet = await getSignerWallet(selectedSigner.address);
-        
+
         if (!wallet) {
             console.error(
                 `CRITICAL: Failed to get wallet for authorized signer ${selectedSigner.address}. ` +
@@ -244,10 +214,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             );
         }
 
+        // Build quote structure for signing
+        const quoteData = {
+            trader: body.trader,
+            market: market.contractAddress!,
+            outcome: body.outcome,
+            amount,
+            cost,
+            deadline: body.deadline,
+            nonce,
+            isSell: body.isSell,
+            minAmountOut: BigInt(body.minAmountOut),
+            minReturn: BigInt(body.minReturn),
+        };
+
         // Sign quote with selected signer from database
         const signedQuote = await signTradeQuote(quoteData, QUOTE_VERIFIER_ADDRESS, wallet);
 
-        // Store signed quote for tracking
+        // Store signed quote for tracking and later reconciliation
         await prisma.signedQuote.create({
             data: {
                 trader: body.trader,
@@ -260,47 +244,50 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
                         ],
                         [
                             body.trader,
-                            market.contractAddress,
+                            market.contractAddress!,
                             body.outcome,
                             amount,
-                            quoteData.cost,
-                            quoteData.deadline,
-                            quoteData.nonce,
+                            cost,
+                            body.deadline,
+                            nonce,
                             body.isSell,
-                            quoteData.minAmountOut,   
-                            quoteData.minReturn       
+                            BigInt(body.minAmountOut),
+                            BigInt(body.minReturn),
                         ]
                     )
                 ),
                 signature: signedQuote.signature,
                 amount: new Decimal(amount.toString()),
-                cost: new Decimal(quoteData.cost.toString()),
-                nonce: quoteData.nonce,
+                cost: new Decimal(cost.toString()),
+                nonce,
                 isSell: body.isSell,
-                marketVersion: market.version,
-                minAmountOut: new Decimal(quoteData.minAmountOut.toString()),  
-                minReturn: new Decimal(quoteData.minReturn.toString()),        
+                marketVersion: body.marketVersion,
+                minAmountOut: new Decimal(body.minAmountOut),
+                minReturn: new Decimal(body.minReturn),
             },
         });
 
-        return NextResponse.json({
-            success: true,
-            quote: {
-                trader: signedQuote.trader,
-                market: signedQuote.market,
-                outcome: signedQuote.outcome,
-                amount: signedQuote.amount.toString(),
-                cost: signedQuote.cost.toString(),
-                isSell: signedQuote.isSell,
-                deadline: signedQuote.deadline,
-                nonce: signedQuote.nonce.toString(),
-                minAmountOut: signedQuote.minAmountOut.toString(),  
-                minReturn: signedQuote.minReturn.toString(),        
-                signature: signedQuote.signature,
+        return NextResponse.json(
+            {
+                success: true,
+                quote: {
+                    trader: signedQuote.trader,
+                    market: signedQuote.market,
+                    outcome: signedQuote.outcome,
+                    amount: signedQuote.amount.toString(),
+                    cost: signedQuote.cost.toString(),
+                    isSell: signedQuote.isSell,
+                    deadline: signedQuote.deadline,
+                    nonce: signedQuote.nonce.toString(),
+                    minAmountOut: signedQuote.minAmountOut.toString(),
+                    minReturn: signedQuote.minReturn.toString(),
+                    signature: signedQuote.signature,
+                },
             },
-        });
+            { headers: { "Cache-Control": "no-store" } }
+        );
     } catch (error) {
-        console.error("Quote generation error:", error);
+        console.error("Quote signing error:", error);
         return NextResponse.json(
             {
                 success: false,

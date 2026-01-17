@@ -3,11 +3,35 @@ import { applyTrade } from "./stateMachine";
 import { Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 
-const toBigInt = (value: Decimal) => BigInt(value.toString());
+/**
+ * Convert Prisma Decimal to BigInt, scaling by 10^18 for wei precision
+ * This handles decimal values from the database like 0.721348
+ * and converts them to proper wei-scale integers
+ */
+const toBigInt = (value: Decimal): bigint => {
+    const str = value.toString();
+    
+    // If value is a decimal (e.g., 0.721348), scale it by 10^18
+    if (str.includes('.')) {
+        const parts = str.split('.');
+        const integerPart = parts[0];
+        const decimalPart = parts[1];
+        
+        // Pad decimal part to 18 places (wei precision)
+        const paddedDecimal = decimalPart.padEnd(18, '0').slice(0, 18);
+        const scaledString = integerPart + paddedDecimal;
+        
+        return BigInt(scaledString);
+    }
+    
+    // If already an integer, scale it by 10^18
+    return BigInt(str) * BigInt(10) ** BigInt(18);
+};
 
 export async function executeTrade({
     marketId,
     side,
+    amount,
     expectedCost,
     expectedVersion,
     trader,
@@ -66,7 +90,7 @@ export async function executeTrade({
                 amount: new Decimal(amount.toString()),
                 cost: new Decimal(cost.toString()),
                 trader,
-                marketVersion: market.version,
+                marketVer: market.version,
             },
         });
 
