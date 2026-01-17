@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { generateTradeQuote, signTradeQuote, isQuoteValid } from "@/lib/quoteGeneration";
+import { getSignerWallet, listAuthorizedSigners } from "@/lib/signerManagement";
 import { ethers } from "ethers";
 import { Decimal } from "@prisma/client/runtime/library";
 
@@ -205,24 +206,46 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
             );
         }
 
-        // Sign quote with backend oracle key
-        const privateKey = process.env.ORACLE_PRIVATE_KEY;
-        if (!privateKey) {
+        // Get list of authorized signers from database
+        const authorizedSigners = await listAuthorizedSigners();
+        
+        if (!authorizedSigners || authorizedSigners.length === 0) {
             console.error(
-                "CRITICAL: ORACLE_PRIVATE_KEY not configured in environment. " +
-                "This is the private key of the authorized quote signer."
+                "CRITICAL: No authorized signers configured in database. " +
+                "Add signers via /api/admin/signers endpoint."
             );
             return NextResponse.json(
                 {
                     success: false,
-                    error: "Quote service unavailable: Oracle not configured",
+                    error: "Quote service unavailable: No authorized signers",
                 },
                 { status: 503 }
             );
         }
 
-        const signer = new ethers.Wallet(privateKey);
-        const signedQuote = await signTradeQuote(quoteData, QUOTE_VERIFIER_ADDRESS, signer);
+        // Choose random signer from authorized signers
+        const randomSignerIndex = Math.floor(Math.random() * authorizedSigners.length);
+        const selectedSigner = authorizedSigners[randomSignerIndex];
+
+        // Get decrypted signer wallet
+        const wallet = await getSignerWallet(selectedSigner.address);
+        
+        if (!wallet) {
+            console.error(
+                `CRITICAL: Failed to get wallet for authorized signer ${selectedSigner.address}. ` +
+                "Check encryption key and private key storage."
+            );
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Quote service unavailable: Signer access failed",
+                },
+                { status: 503 }
+            );
+        }
+
+        // Sign quote with selected signer from database
+        const signedQuote = await signTradeQuote(quoteData, QUOTE_VERIFIER_ADDRESS, wallet);
 
         // Store signed quote for tracking
         await prisma.signedQuote.create({

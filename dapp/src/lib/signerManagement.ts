@@ -2,10 +2,15 @@
  * Signer Management - Handle private key encryption/decryption for quote signing
  * 
  * Private keys are:
- * - Stored encrypted in database
- * - Decrypted only when needed for signing
+ * - Stored encrypted in database (AES-256-GCM)
+ * - Decrypted only when needed for signing (never stored in memory)
  * - Never logged or exposed
  * - Immediately discarded after use
+ * 
+ * Signers are:
+ * - Selected randomly from authorized signers in database
+ * - NOT loaded from environment variables
+ * - Managed via /api/admin/signers endpoint
  */
 
 import { prisma } from './db';
