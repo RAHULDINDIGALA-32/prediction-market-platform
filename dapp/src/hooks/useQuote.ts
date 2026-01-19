@@ -7,7 +7,7 @@ export interface UnsignedQuote {
   quote: {
     trader: string;
     market: string;
-    outcome: number;
+    outcome: 0 | 1;  // Frontend format: YES=0, NO=1
     amount: string;
     cost: string;
     deadline: number;
@@ -25,7 +25,7 @@ export interface SignedQuote {
     trader: string;
     market: string;
     marketId: string;
-    outcome: number;
+    outcome: 1 | 2;  // Contract format: YES=1, NO=2 (converted during signing)
     amount: string;
     cost: string;
     deadline: number;
@@ -146,11 +146,11 @@ export async function signQuote(unsignedQuote: UnsignedQuote, marketId: string):
 
   const signedData = await res.json();
   return {
-    ...signedData,
     quote: {
       ...signedData.quote,
       marketId,
     },
+    signature: signedData.quote.signature,
   };
 }
 
@@ -221,5 +221,3 @@ export function useQuote(request: QuoteRequest | null) {
     isExpired: timeUntilExpiry !== null && timeUntilExpiry <= 0,
   };
 }
-
-

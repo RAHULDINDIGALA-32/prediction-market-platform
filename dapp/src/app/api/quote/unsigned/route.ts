@@ -25,7 +25,7 @@ interface UnsignedQuoteResponse {
     quote?: {
         trader: string;
         market: string;
-        outcome: 0 | 1;
+        outcome: 0 | 1;  // Frontend format: YES=0, NO=1 (will be converted to 1|2 during signing)
         amount: string;
         cost: string;
         isSell: boolean;
@@ -209,18 +209,27 @@ export async function POST(request: NextRequest): Promise<NextResponse<UnsignedQ
         const minAmountOut = body.isSell ? 0n : (amount * 99n) / 100n;
         const minReturn = !body.isSell ? 0n : (amount * 99n) / 100n;
 
-        // Generate UNSIGNED quote
+        // QuoteVerifier enforces: quote.nonce > traderNonces[trader][market]
+      
+        const nextNonce = traderNonce.lastNonce + BigInt(1);
+
+        // Convert frontend outcome (0 | 1) to contract enum (1 | 2)
+        // Frontend: 0 = YES, 1 = NO
+        // Contract: 1 = YES, 2 = NO
+        const contractOutcome = (body.outcome as 0 | 1) + 1 as 1 | 2;
+
+        // Generate UNSIGNED quote using contract enum values
         const quoteData = generateTradeQuote(
             market.contractAddress,
             QUOTE_VERIFIER_ADDRESS,
             body.trader,
-            body.outcome,
+            contractOutcome,
             amount,
             body.isSell,
             toBigInt(market.qYes),
             toBigInt(market.qNo),
             toBigInt(market.lmsrB),
-            traderNonce.lastNonce,
+            nextNonce,
             minAmountOut,
             minReturn
         );
@@ -240,7 +249,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<UnsignedQ
                 quote: {
                     trader: quoteData.trader,
                     market: quoteData.market,
-                    outcome: quoteData.outcome,
+                    outcome: body.outcome,  // Return frontend format (0 | 1) in response for clarity
                     amount: quoteData.amount.toString(),
                     cost: quoteData.cost.toString(),
                     isSell: quoteData.isSell,

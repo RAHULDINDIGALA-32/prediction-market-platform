@@ -41,13 +41,13 @@ function getEIP712Domain(quoteVerifierAddress: string) {
 
 /**
  * EIP-712 type definitions for TradeQuote
- * On-chain includes: trader, market, outcome, amount, cost, deadline, nonce, isSell, minAmountOut, minReturn
+ * outcome field must be uint8 (matches Outcome enum encoding in Solidity)
  */
 const TRADE_QUOTE_TYPES = {
     TradeQuote: [
         { name: "trader", type: "address" },
         { name: "market", type: "address" },
-        { name: "outcome", type: "uint8" },  // Enum is uint8 in Solidity
+        { name: "outcome", type: "uint8" },  // Contract enum encoded as uint8 (1 or 2)
         { name: "amount", type: "uint256" },
         { name: "cost", type: "uint256" },
         { name: "deadline", type: "uint256" },
@@ -61,7 +61,7 @@ const TRADE_QUOTE_TYPES = {
 export interface TradeQuoteData {
     trader: string;
     market: string;
-    outcome: 0 | 1; // 0 = YES, 1 = NO (maps to Outcome.YES and Outcome.NO)
+    outcome: 1 | 2; // Contract enum: 1 = YES, 2 = NO (matches Solidity Outcome enum)
     amount: bigint;
     cost: bigint;
     isSell: boolean;
@@ -83,7 +83,7 @@ export interface SignedTradeQuote extends TradeQuoteData {
  * @param marketAddress - Address of the market contract
  * @param quoteVerifierAddress - Address of the QuoteVerifier contract (for EIP-712 domain)
  * @param trader - Address of the trader executing the trade
- * @param outcome - Outcome to trade (YES=0 or NO=1)
+ * @param outcome - Contract outcome enum value (YES=1 or NO=2)
  * @param amount - Number of tokens to buy/sell (in wei)
  * @param isSell - Whether this is a sell (true) or buy (false)
  * @param currentQYes - Current YES token quantity in market
@@ -98,7 +98,7 @@ export function generateTradeQuote(
     marketAddress: string,
     quoteVerifierAddress: string,  
     trader: string,
-    outcome: 0 | 1,
+    outcome: 1 | 2,  // Contract enum: 1 = YES, 2 = NO
     amount: bigint,
     isSell: boolean,
     currentQYes: bigint,
@@ -118,21 +118,26 @@ export function generateTradeQuote(
         throw new Error("Invalid trader address");
     }
 
+    // Validate outcome is contract enum value (1 or 2, not frontend 0 or 1)
+    if (outcome !== 1 && outcome !== 2) {
+        throw new Error("Invalid outcome: must be 1 (YES) or 2 (NO) per contract enum");
+    }
+
     // Calculate cost using LMSR
     const oldCost = lmsrCost(currentQYes, currentQNo, lmsrB);
 
     let newQYes = currentQYes;
     let newQNo = currentQNo;
 
-    if (outcome === 0) {
-        // YES trade
+    if (outcome === 1) {
+        // YES trade (outcome enum value 1)
         if (isSell) {
             newQYes = newQYes - amount;
         } else {
             newQYes = newQYes + amount;
         }
     } else {
-        // NO trade
+        // NO trade (outcome enum value 2)
         if (isSell) {
             newQNo = newQNo - amount;
         } else {

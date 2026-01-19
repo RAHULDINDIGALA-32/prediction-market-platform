@@ -13,7 +13,7 @@ import { useMarketInfo, useMarketProbabilities, useUserPositions, useEthBalance 
 import { useUnsignedQuote, signQuote } from "@/hooks/useQuote";
 import { calculateProbability, formatEth, formatTimeRemaining, formatAddress } from "@/lib/utils";
 import { parseContractError } from "@/lib/errors";
-import { AlertTriangle, Clock, TrendingUp, TrendingDown, AlertCircle, Wallet } from "lucide-react";
+import { AlertTriangle, Clock, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle, Loader } from "lucide-react";
 import TradeConfirmationModal from "@/components/TradeConfirmationModal";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 
@@ -79,7 +79,7 @@ interface Props {
 const ESTIMATED_GAS_COST = BigInt(150000); // Estimated gas units for a trade
 const GAS_PRICE_GWEI = BigInt(50); // Estimate 50 gwei
 const SCALE_GWEI = 1_000_000_000n;
-const SACLE_WEI = 1_000_000_000_000_000_000n;
+const SCALE_WEI = 1_000_000_000_000_000_000n;
 
 export default function MarketDetailClient({ market }: Props) {
   const { address } = useAccount();
@@ -90,6 +90,8 @@ export default function MarketDetailClient({ market }: Props) {
   const [pendingUnsignedQuote, setPendingUnsignedQuote] = useState<any>(null);
   const [signingError, setSigningError] = useState<string | null>(null);
   const [isSigningQuote, setIsSigningQuote] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [txStatus, setTxStatus] = useState<"pending" | "confirmed" | "failed" | null>(null);
 
   const marketAddress = market.contractAddress as `0x${string}` | undefined;
   const { data: marketInfo } = useMarketInfo(marketAddress);
@@ -133,6 +135,26 @@ export default function MarketDetailClient({ market }: Props) {
   }, [unsignedQuote, isExpired, refetch]);
 
   const { writeContractAsync, isPending: isWriting } = useWriteContract();
+  const { data: receipt, isLoading: isConfirming, isSuccess, isError } = useWaitForTransactionReceipt({
+    hash: txHash as `0x${string}` | undefined,
+  });
+
+  // Update transaction status based on receipt
+  useEffect(() => {
+    if (isSuccess) {
+      setTxStatus("confirmed");
+      // Auto-close modal and reset form after successful confirmation
+      setTimeout(() => {
+        setShowConfirmModal(false);
+        setAmount("");
+        setPendingUnsignedQuote(null);
+        setTxHash(null);
+        setTxStatus(null);
+      }, 3000); // Show success for 3 seconds
+    } else if (isError) {
+      setTxStatus("failed");
+    }
+  }, [isSuccess, isError]);
 
   // Calculate max buyable / sellable
   const calculateMaxAmount = (): string => {
@@ -164,8 +186,8 @@ export default function MarketDetailClient({ market }: Props) {
       const currentAmount = BigInt(unsignedQuote.quote.amount);
       if (currentAmount === 0n) return "0";
 
-      const costPerToken = (quoteCost * SACLE_WEI) / currentAmount; // Wei per token
-      const maxTokens = (availableEth * SACLE_WEI) / costPerToken;
+      const costPerToken = (quoteCost * SCALE_WEI) / currentAmount; // Wei per token
+      const maxTokens = (availableEth * SCALE_WEI) / costPerToken;
 
       return formatEth(maxTokens, 4).replace(" ETH", "");
     }
@@ -179,9 +201,6 @@ export default function MarketDetailClient({ market }: Props) {
   const amountBigInt = amount ? BigInt(Math.floor(Number(amount) * 1e18)) : 0n;
   const isAmountExceedsSellBalance = isSell && amountBigInt > selectedBalance;
   const isAmountExceedsEthBalance = !isSell && unsignedQuote && BigInt(unsignedQuote.quote.cost) > ethBalance;
-  console.log("Quote cost: ", unsignedQuote?.quote?.cost); 
-  console.log("Eth balance: ", ethBalance);
-  console.log("Amount exceeds sell balance: ", isAmountExceedsSellBalance);
 
   // Handle max button click
   const handleMaxClick = () => {
@@ -212,15 +231,20 @@ export default function MarketDetailClient({ market }: Props) {
     try {
       setIsSigningQuote(true);
       setSigningError(null);
+      setTxStatus(null);
+      setTxHash(null);
 
       // Step 1: Sign the quote
       const signedQuote = await signQuote(pendingUnsignedQuote, market.id);
+      console.log("Signed quote (outcome already converted to contract enum):", signedQuote);
 
       // Step 2: Execute on-chain transaction
+      // The outcome in signedQuote is already in contract format (1 or 2)
+
       const quoteStruct = {
         trader: signedQuote.quote.trader as `0x${string}`,
         market: signedQuote.quote.market as `0x${string}`,
-        outcome: signedQuote.quote.outcome as 0 | 1,
+        outcome: signedQuote.quote.outcome, // Already contract enum (1 or 2) - signature was computed over this value
         amount: BigInt(signedQuote.quote.amount),
         cost: BigInt(signedQuote.quote.cost),
         deadline: BigInt(signedQuote.quote.deadline),
@@ -230,9 +254,19 @@ export default function MarketDetailClient({ market }: Props) {
         minReturn: BigInt(signedQuote.quote.minReturn ?? 0),
       };
 
-      const value = signedQuote.quote.isSell ? 0n : BigInt(signedQuote.quote.cost);
+      console.log("Quote struct for contract (outcome from signed quote):", quoteStruct);
 
-      await writeContractAsync({
+      // Validate value matches cost for buys
+      const value = signedQuote.quote.isSell ? 0n : BigInt(signedQuote.quote.cost);
+      console.log("Transaction value:", value.toString(), "wei", "cost:", signedQuote.quote.cost);
+
+      if (!signedQuote.quote.isSell && value !== BigInt(signedQuote.quote.cost)) {
+        throw new Error("Value mismatch: ETH amount must exactly match quote cost");
+      }
+
+      setTxStatus("pending");
+
+      const txHashResult = await writeContractAsync({
         address: signedQuote.quote.market as `0x${string}`,
         abi: MARKET_ABI,
         functionName: "executeTrade",
@@ -243,18 +277,31 @@ export default function MarketDetailClient({ market }: Props) {
           BigInt(signedQuote.quote.minReturn ?? 0),
         ],
         value,
+         gas: BigInt(5000000), // Set a high gas limit to avoid out-of-gas errors
       });
 
-      setShowConfirmModal(false);
-      setAmount("");
-
-      // Refetch data after successful trade
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      console.log("Transaction sent:", txHashResult);
+      setTxHash(txHashResult);
     } catch (error: any) {
       console.error("Trade execution failed:", error);
-      setSigningError(error.message || "Trade execution failed");
+      setTxStatus("failed");
+
+      // Detailed error parsing
+      let errorMessage = "Trade execution failed. Please try again.";
+      
+      if (error?.message?.includes("User rejected")) {
+        errorMessage = "Transaction rejected by user";
+      } else if (error?.message?.includes("insufficient") || error?.message?.includes("Insufficient")) {
+        errorMessage = "Insufficient balance or allowance";
+      } else if (error?.message?.includes("REVERT") || error?.data?.message?.includes("REVERT")) {
+        errorMessage = "Transaction reverted on-chain. Check contract state and parameters.";
+      } else if (error?.shortMessage) {
+        errorMessage = error.shortMessage;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+
+      setSigningError(errorMessage);
     } finally {
       setIsSigningQuote(false);
     }
@@ -318,7 +365,7 @@ export default function MarketDetailClient({ market }: Props) {
             </div>
             <div>
               <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Created</div>
-              <div className="text-sm">{market.createdAt.toLocaleDateString()}</div>
+              <div className="text-sm">{new Date(market.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}</div>
             </div>
           </div>
         </CardContent>
@@ -558,6 +605,74 @@ export default function MarketDetailClient({ market }: Props) {
               </div>
             )}
 
+            {/* Transaction Status UI */}
+            {txHash && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`rounded-lg border-2 p-4 space-y-3 ${
+                  txStatus === "pending"
+                    ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20"
+                    : txStatus === "confirmed"
+                    ? "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20"
+                    : "border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {txStatus === "pending" && (
+                    <Loader className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
+                  )}
+                  {txStatus === "confirmed" && (
+                    <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  )}
+                  {txStatus === "failed" && (
+                    <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                  )}
+                  <div className="flex-1">
+                    <div className={`font-semibold text-sm ${
+                      txStatus === "pending"
+                        ? "text-blue-900 dark:text-blue-100"
+                        : txStatus === "confirmed"
+                        ? "text-green-900 dark:text-green-100"
+                        : "text-red-900 dark:text-red-100"
+                    }`}>
+                      {txStatus === "pending" && "Transaction Pending..."}
+                      {txStatus === "confirmed" && "Trade Executed Successfully! ✓"}
+                      {txStatus === "failed" && "Transaction Failed"}
+                    </div>
+                    <div className={`text-xs mt-1 ${
+                      txStatus === "pending"
+                        ? "text-blue-700 dark:text-blue-300"
+                        : txStatus === "confirmed"
+                        ? "text-green-700 dark:text-green-300"
+                        : "text-red-700 dark:text-red-300"
+                    }`}>
+                      Hash: <span className="font-mono break-all">{txHash.slice(0, 10)}...{txHash.slice(-8)}</span>
+                    </div>
+                  </div>
+                </div>
+                {txStatus === "pending" && (
+                  <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                    <p>• Waiting for block confirmation</p>
+                  </div>
+                )}
+                {txStatus === "confirmed" && (
+                  <div className="text-xs text-green-700 dark:text-green-300 space-y-1">
+                    <p>• {formatEth(BigInt(pendingUnsignedQuote?.quote?.amount || "0"), 4)} {side} tokens received</p>
+                    <p>• Market data will update shortly</p>
+                  </div>
+                )}
+                {txStatus === "failed" && (
+                  <div className="text-xs text-red-700 dark:text-red-300">
+                    <p className="mb-2">Check the error message above for details</p>
+                    <p className="font-mono text-xs break-all bg-red-100 dark:bg-red-900/40 p-2 rounded">
+                      {txHash}
+                    </p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
             {/* Trade Button */}
             <Button
               onClick={handleTradeClick}
@@ -571,7 +686,7 @@ export default function MarketDetailClient({ market }: Props) {
                 !amount ||
                 isWriting
               }
-              className="w-full"
+              className="w-full cursor-pointer"
             >
               {quoteLoading
                 ? "Getting quote..."

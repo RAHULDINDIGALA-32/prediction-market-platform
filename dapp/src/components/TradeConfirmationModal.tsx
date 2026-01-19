@@ -45,7 +45,7 @@ export default function TradeConfirmationModal({
   const timeUntilExpiry = deadline.getTime() - Date.now();
   const secondsRemaining = Math.max(0, Math.floor(timeUntilExpiry / 1000));
 
-  const maxLoss = isSell ? formatEth(quote.quote.amount, 4) : formatEth(quote.quote.cost, 4);
+  const maxLoss = isSell ? formatEth(BigInt(quote.quote.amount), 4) : formatEth(BigInt(quote.quote.cost), 4);
 
   return (
     <Dialog open={true} onOpenChange={onCancel}>
@@ -74,7 +74,7 @@ export default function TradeConfirmationModal({
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-zinc-600 dark:text-zinc-400">{isSell ? "ETH Received" : "ETH Cost"}</span>
-              <span className="text-sm font-semibold">{formatEth(quote.quote.cost, 4)}</span>
+              <span className="text-sm font-semibold">{formatEth(BigInt(quote.quote.cost), 4)}</span>
             </div>
             <div className="flex items-center justify-between pt-2 border-t border-zinc-200 dark:border-zinc-800">
               <span className="text-sm text-zinc-600 dark:text-zinc-400">Max {isSell ? "Gain" : "Loss"}</span>
@@ -119,10 +119,10 @@ export default function TradeConfirmationModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onCancel} disabled={isPending}>
+          <Button  variant="outline" onClick={onCancel} disabled={isPending}>
             Cancel
           </Button>
-          <Button onClick={onConfirm} disabled={isPending || secondsRemaining <= 0}>
+          <Button onClick={onConfirm} disabled={isPending || secondsRemaining <= 0} className="cursor-pointer">
             {isPending ? "Processing..." : "Confirm Trade"}
           </Button>
         </DialogFooter>

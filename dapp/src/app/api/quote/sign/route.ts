@@ -29,7 +29,7 @@ interface SignedQuoteResponse {
     quote?: {
         trader: string;
         market: string;
-        outcome: 0 | 1;
+        outcome: 1 | 2;  // Contract enum: YES=1, NO=2
         amount: string;
         cost: string;
         isSell: boolean;
@@ -214,11 +214,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignedQuo
             );
         }
 
-        // Build quote structure for signing
+        // Outcome conversion: frontend uses 0/1, contract enum uses 1/2
+        // Frontend: 0 = YES, 1 = NO
+        // Contract: 1 = YES, 2 = NO
+        // Convert immediately, then use contract values throughout
+        const contractOutcome = (body.outcome as 0 | 1) + 1 as 1 | 2;
+
+        // Build quote structure for signing using CONTRACT ENUM VALUES
+        // The signature MUST be computed over the contract enum value (1 or 2)
+        // to match what the on-chain contract verifies
         const quoteData = {
             trader: body.trader,
             market: market.contractAddress!,
-            outcome: body.outcome,
+            outcome: contractOutcome,  // Contract enum: 1 or 2
             amount,
             cost,
             deadline: body.deadline,
@@ -229,6 +237,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignedQuo
         };
 
         // Sign quote with selected signer from database
+        // Signature is computed over contract enum value (1 or 2)
         const signedQuote = await signTradeQuote(quoteData, QUOTE_VERIFIER_ADDRESS, wallet);
 
         // Store signed quote for tracking and later reconciliation
@@ -245,7 +254,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignedQuo
                         [
                             body.trader,
                             market.contractAddress!,
-                            body.outcome,
+                            contractOutcome,  // Use contract enum value for hash
                             amount,
                             cost,
                             body.deadline,
