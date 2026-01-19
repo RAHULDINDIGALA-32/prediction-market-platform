@@ -51,11 +51,20 @@ export default function CreateMarketClient() {
   // Calculate total ETH required: MARKET_CREATION_FEE (0.03 ETH) + subsidy
       const MARKET_CREATION_FEE = BigInt(Math.floor(0.03 * 1e18));
 
-  // Check if user is authorized
+  // Admin address from env
+  const adminAddress = process.env.NEXT_PUBLIC_ADMIN_ADDRESS?.toLowerCase();
+  const isAdmin = address && adminAddress && address.toLowerCase() === adminAddress;
+
+  // Check if user is authorized (creator in database OR admin)
   const { data: isAuthorized, isLoading: checkingAuth } = useQuery({
     queryKey: ["isAuthorized", address],
     queryFn: async () => {
       if (!address) return false;
+      
+      // Admin is always authorized to create markets
+      if (isAdmin) return true;
+      
+      // Check if user is a creator in database
       const res = await fetch(`/api/admin/check-creator?address=${address}`);
       return res.ok;
     },
@@ -386,7 +395,7 @@ export default function CreateMarketClient() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-2">Create Market</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Only authorized creators can create markets
+            Only authorized creators and admins can create markets
           </p>
         </div>
         <Card>

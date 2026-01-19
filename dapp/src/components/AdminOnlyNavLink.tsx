@@ -11,24 +11,24 @@ interface Props {
   label: string;
 }
 
-export default function AdminNavLink({ href, label }: Props) {
+export default function AdminOnlyNavLink({ href, label }: Props) {
   const { address } = useAccount();
   const pathname = usePathname();
   const isActive = pathname === href;
 
-  const { data: isAuthorized } = useQuery({
-    queryKey: ["isAuthorized", address],
+  const { data: isAdmin } = useQuery({
+    queryKey: ["isAdmin", address],
     queryFn: async () => {
       if (!address) return false;
       const res = await fetch(`/api/admin/check-creator?address=${address}`);
       if (!res.ok) return false;
       const data = await res.json();
-      return data.authorized;
+      return data.isAdmin;
     },
     enabled: !!address,
   });
 
-  if (!isAuthorized) {
+  if (!isAdmin) {
     return null;
   }
 
@@ -46,4 +46,3 @@ export default function AdminNavLink({ href, label }: Props) {
     </Link>
   );
 }
-

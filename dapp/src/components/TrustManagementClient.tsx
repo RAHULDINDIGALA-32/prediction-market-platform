@@ -37,6 +37,10 @@ export default function TrustManagementClient() {
   const marketFactoryAddress = process.env.NEXT_PUBLIC_MARKET_FACTORY_ADDRESS as `0x${string}`;
   const quoteVerifierAddress = process.env.NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS as `0x${string}`;
   const oracleAdapterAddress = process.env.NEXT_PUBLIC_ORACLE_ADAPTER_ADDRESS as `0x${string}`;
+  
+  // Admin-only access control
+  const adminAddress = process.env.NEXT_PUBLIC_ADMIN_ADDRESS?.toLowerCase();
+  const isAdmin = address && adminAddress && address.toLowerCase() === adminAddress;
 
   /**
    * Execute a contract transaction using wagmi's walletClient
@@ -340,6 +344,31 @@ export default function TrustManagementClient() {
           <CardContent className="p-12 text-center">
             <p className="text-md text-zinc-500 dark:text-zinc-400 mb-4">
               Connect wallet to continue
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Admin-only access enforcement
+  if (!isAdmin) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight mb-2">Admin Management</h1>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            Manage Market creators, Oracle resolvers and Trade Quote signers
+          </p>
+        </div>
+        <Card>
+          <CardContent className="p-12 text-center">
+            <div className="flex items-center justify-center gap-2 text-red-600 dark:text-red-400 mb-4">
+              <AlertCircle className="h-5 w-5" />
+              <span className="font-semibold">Access Denied</span>
+            </div>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Only the admin address can access this page.
             </p>
           </CardContent>
         </Card>

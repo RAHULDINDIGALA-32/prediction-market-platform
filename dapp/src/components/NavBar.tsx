@@ -4,7 +4,8 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import AdminNavLink from "./AdminNavLink";
+import CreatorNavLink from "./CreatorNavLink";
+import AdminOnlyNavLink from "./AdminOnlyNavLink";
 
 type Props = {
   children: React.ReactNode;
@@ -15,8 +16,8 @@ const routes = [
   { href: "/portfolio", label: "Portfolio" },
   { href: "/settlement", label: "Settlement" },
   { href: "/oracle", label: "Oracle" },
-  { href: "/admin/create-market", label: "Create Market", adminOnly: true },
-  { href: "/admin/management", label: "Trust Management", adminOnly: true },
+  { href: "/admin/create-market", label: "Create Market", requiresCreator: true },
+  { href: "/admin/management", label: "Trust Management", requiresAdmin: true },
 ];
 
 function classNames(...classes: Array<string | false | null | undefined>) {
@@ -48,8 +49,8 @@ export default function NavBar({ children }: Props) {
 
           <nav className="hidden items-center gap-2 text-sm font-medium sm:flex">
             {routes.map((route) => {
-              if (route.adminOnly) {
-                return null; // Will be handled by AdminNavLink
+              if (route.requiresCreator || route.requiresAdmin) {
+                return null; // Will be handled by specialized components
               }
               const isActive =
                 route.href === "/"
@@ -71,9 +72,14 @@ export default function NavBar({ children }: Props) {
               );
             })}
             {routes
-              .filter((r) => r.adminOnly)
+              .filter((r) => r.requiresCreator)
               .map((route) => (
-                <AdminNavLink key={route.href} href={route.href} label={route.label} />
+                <CreatorNavLink key={route.href} href={route.href} label={route.label} />
+              ))}
+            {routes
+              .filter((r) => r.requiresAdmin)
+              .map((route) => (
+                <AdminOnlyNavLink key={route.href} href={route.href} label={route.label} />
               ))}
           </nav>
 
@@ -92,5 +98,3 @@ export default function NavBar({ children }: Props) {
     </div>
   );
 }
-
-
