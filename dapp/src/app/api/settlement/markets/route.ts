@@ -1,6 +1,7 @@
 /**
- * @description Fetch markets filtered by oracle status (CLOSED, DISPUTED, RESOLVED)
- * Determines status based on OracleEvent table and current market state
+ * @description Fetch markets filtered by settlement status (RESOLVED, SETTLED)
+ * RESOLVED: Oracle outcome finalized, redemption period open (30 days)
+ * SETTLED: Redemption period closed, creators can withdraw
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -9,7 +10,7 @@ import { prisma } from "@/lib/db";
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const status = searchParams.get("status"); // CLOSED, DISPUTED, RESOLVED
+    const status = searchParams.get("status"); // RESOLVED, SETTLED
     const category = searchParams.get("category");
     const search = searchParams.get("search");
 
@@ -17,10 +18,10 @@ export async function GET(request: NextRequest) {
     const markets = await prisma.market.findMany({
       where: {
         AND: [
-          // Only include markets in CLOSED, RESOLVED, or SETTLED state (no trading)
+          // Only include markets in RESOLVED or SETTLED state
           {
             status: {
-              in: ["CLOSED", "RESOLVED", "SETTLED"],
+              in: ["RESOLVED", "SETTLED"],
             },
           },
           category ? { category: category } : {},
@@ -48,35 +49,38 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Determine oracle status (off-chain convenience)
+    // Return markets enriched with settlement status and resolved time
     const enrichedMarkets = markets.map((market) => {
       const latestEvent = market.oracleEvents[0];
-      let oracleStatus: "CLOSED" | "DISPUTED" | "RESOLVED" = "CLOSED";
+      const resolvedAt = latestEvent?.finalizedAt ? Math.floor(latestEvent.finalizedAt.getTime() / 1000) : 0;
+      const redemptionPeriodSeconds = 30 * 24 * 60 * 60; // 30 days
+      const redemptionEndsAt = resolvedAt + redemptionPeriodSeconds;
+      const currentTime = Math.floor(Date.now() / 1000);
 
-      if (latestEvent) {
-        if (latestEvent.finalized) {
-          oracleStatus = "RESOLVED";
-        } else if (latestEvent.disputer !== null) {
-          oracleStatus = "DISPUTED";
-        }
+      // Determine settlement status based on redemption window
+      let settlementStatus: "RESOLVED" | "SETTLED" = "RESOLVED";
+      if (market.status === "SETTLED" || currentTime >= redemptionEndsAt) {
+        settlementStatus = "SETTLED";
       }
 
       return {
         ...market,
-        oracleStatus,
+        settlementStatus,
+        resolvedAt,
+        redemptionEndsAt,
         latestOracleEvent: latestEvent || null,
       };
     });
 
-    // Filter by oracle status if specified
+    // Filter by settlement status if specified
     const filtered =
-      status && ["CLOSED", "DISPUTED", "RESOLVED"].includes(status)
-        ? enrichedMarkets.filter((m) => m.oracleStatus === status)
+      status && ["RESOLVED", "SETTLED"].includes(status)
+        ? enrichedMarkets.filter((m) => m.settlementStatus === status)
         : enrichedMarkets;
 
     return NextResponse.json(filtered);
   } catch (error) {
-    console.error("Error fetching oracle markets:", error);
+    console.error("Error fetching settlement markets:", error);
     return NextResponse.json(
       { error: "Failed to fetch markets" },
       { status: 500 }
