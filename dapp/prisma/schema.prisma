@@ -37,22 +37,39 @@ model Market {
   trades          Trade[]
   traderNonces    TraderNonce[]
   oracleEvents    OracleEvent[]
+  redemptionEvents RedemptionEvent[] @relation(name: "RedemptionEvents")
+  settlementEvents SettlementEvent[] @relation(name: "SettlementEvents")
 }
 
 model OracleEvent {
-  id           String      @id @default(uuid())
-  marketId     String
-  market       Market      @relation(fields: [marketId], references: [id], onDelete: Cascade)
-  proposer     String
-  disputer     String?
-  proposed     Outcome
-  finalized    Outcome?
-  disputedAt   DateTime?
-  finalizedAt  DateTime    @default(now())
-  createdAt    DateTime    @default(now())
+  id                String      @id @default(uuid())
+  marketId          String
+  market            Market      @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  
+  // Oracle participants
+  proposer          String
+  disputer          String?
+  
+  // Proposed and finalized outcomes
+  proposed          Outcome
+  finalized         Outcome?
+  disputed          Boolean     @default(false)
+  
+  // Timestamps for state transitions
+  disputedAt        DateTime?
+  finalizedAt       DateTime?   // NULL until finalized, then explicitly set
+  createdAt         DateTime    @default(now())
+  
+  proposalTxHash    String?     @unique
+  proposalBlock     BigInt?
+  disputeTxHash     String?     @unique
+  disputeBlock      BigInt?
+  resolutionTxHash  String?     @unique
+  resolutionBlock   BigInt?
 
   @@index([marketId])
   @@index([proposer])
+  @@index([finalized])
 }
 
 model TraderNonce {
@@ -141,6 +158,46 @@ model SyncLog {
   createdAt        DateTime @default(now())
 
   @@index([service])
+}
+
+
+model RedemptionEvent {
+  id              String      @id @default(uuid())
+  marketId        String
+  market          Market      @relation(name: "RedemptionEvents", fields: [marketId], references: [id], onDelete: Cascade)
+  
+  user            String      // User who redeemed tokens
+  amount          BigInt      // Tokens redeemed (in wei)
+  
+  // Transaction info for audit trail
+  transactionHash String      @unique
+  blockNumber     BigInt
+  
+  createdAt       DateTime    @default(now())
+
+  @@index([marketId])
+  @@index([user])
+  @@index([transactionHash])
+}
+
+
+model SettlementEvent {
+  id              String      @id @default(uuid())
+  marketId        String
+  market          Market      @relation(name: "SettlementEvents", fields: [marketId], references: [id], onDelete: Cascade)
+  
+  creator         String      // Creator address
+  amountWithdrawn BigInt      // Collateral withdrawn (in wei)
+  
+  // Transaction info for audit trail
+  transactionHash String      @unique
+  blockNumber     BigInt
+  
+  createdAt       DateTime    @default(now())
+
+  @@index([marketId])
+  @@index([creator])
+  @@index([transactionHash])
 }
 
 

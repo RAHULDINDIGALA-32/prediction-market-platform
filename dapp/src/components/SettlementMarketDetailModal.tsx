@@ -34,6 +34,7 @@ import {
   formatAddress,
 } from "@/lib/utils";
 import { getSettlementConfig, weiToEth, formatSeconds, isRedemptionClosed, getRedemptionTimeRemaining } from "@/lib/settlementConfig";
+import { syncSettlementToDatabase } from "@/lib/blockchainUtils";
 import { SettlementMarket } from "@/hooks/useSettlementMarkets";
 
 const SETTLEMENT_ENGINE_ABI = [
@@ -235,7 +236,28 @@ export default function SettlementMarketDetailModal({
         args: [marketAddress, parseEthToWei(redeemAmount)],
       });
       setTxHash(hash);
-      setRedeemAmount("");
+
+      // ISSUE #5 RESOLUTION: Sync token redemption to database for audit trail
+      console.log(
+        `[SETTLEMENT MODAL] Syncing redemption for market ${market.id}`
+      );
+      const syncSuccess = await syncSettlementToDatabase(
+        "redeem",
+        market.id,
+        hash as `0x${string}`,
+        {
+          user: userAddress,
+          amount: parseEthToWei(redeemAmount).toString(),
+        }
+      );
+
+      if (!syncSuccess) {
+        console.error(
+          "[SETTLEMENT MODAL] Redemption syncing failed - database may be out of sync"
+        );
+      } else {
+        setRedeemAmount("");
+      }
     } catch (error) {
       console.error("Redemption failed:", error);
     }
@@ -252,6 +274,26 @@ export default function SettlementMarketDetailModal({
         args: [marketAddress],
       });
       setTxHash(hash);
+
+      // ISSUE #6 RESOLUTION: Sync creator withdrawal to database and mark market as SETTLED
+      console.log(
+        `[SETTLEMENT MODAL] Syncing withdrawal for market ${market.id}`
+      );
+      const syncSuccess = await syncSettlementToDatabase(
+        "withdraw",
+        market.id,
+        hash as `0x${string}`,
+        {
+          creator: userAddress,
+          amountWithdrawn: vaultBalance?.toString() || "0",
+        }
+      );
+
+      if (!syncSuccess) {
+        console.error(
+          "[SETTLEMENT MODAL] Withdrawal syncing failed - database may be out of sync"
+        );
+      }
     } catch (error) {
       console.error("Withdrawal failed:", error);
     }

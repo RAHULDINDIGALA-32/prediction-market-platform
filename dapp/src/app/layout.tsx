@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import WalletProviders from "@/components/WalletProviders";
 import "@rainbow-me/rainbowkit/styles.css";
-import { initializeServices } from "@/lib/initializeServices";
+//import { initializeServices } from "@/lib/initializeServices";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,7 +21,8 @@ export const metadata: Metadata = {
 };
 
 // Initialize background services on app startup
-initializeServices().catch(console.error);
+// this approach may not work in serverless environments like Vercel, so we have switched to using UI triggered dataBase sync
+//initializeServices().catch(console.error);
 
 export default function RootLayout({
   children,

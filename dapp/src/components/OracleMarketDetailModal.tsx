@@ -33,6 +33,7 @@ import {
   formatAddress,
 } from "@/lib/utils";
 import { getOracleConfig, weiToEth, formatSeconds } from "@/lib/oracleConfig";
+import { syncOracleToDatabase } from "@/lib/blockchainUtils";
 import { OracleMarket } from "@/hooks/useOracleMarkets";
 
 
@@ -159,6 +160,27 @@ export default function OracleMarketDetailModal({
 
       setTxHash(hash);
       setTxStatus("success");
+
+      // ISSUE #1 RESOLUTION: Sync oracle proposal to database
+      console.log(`[ORACLE MODAL] Syncing proposal for market ${market.id}`);
+      const syncSuccess = await syncOracleToDatabase(
+        "propose",
+        market.id,
+        hash as `0x${string}`,
+        {
+          proposer: userAddress,
+          proposedOutcome: selectedOutcome,
+        }
+      );
+
+      if (!syncSuccess) {
+        console.error(
+          "[ORACLE MODAL] Proposal syncing failed - database may be out of sync"
+        );
+        setTxError(
+          "Proposal confirmed but database sync failed. Please refresh the page."
+        );
+      }
     } catch (err: any) {
       setTxStatus("error");
       setTxError(err?.message || "Failed to propose outcome");
@@ -186,6 +208,26 @@ export default function OracleMarketDetailModal({
 
       setTxHash(hash);
       setTxStatus("success");
+
+      // ISSUE #2 RESOLUTION: Sync oracle dispute to database
+      console.log(`[ORACLE MODAL] Syncing dispute for market ${market.id}`);
+      const syncSuccess = await syncOracleToDatabase(
+        "dispute",
+        market.id,
+        hash as `0x${string}`,
+        {
+          disputer: userAddress,
+        }
+      );
+
+      if (!syncSuccess) {
+        console.error(
+          "[ORACLE MODAL] Dispute syncing failed - database may be out of sync"
+        );
+        setTxError(
+          "Dispute confirmed but database sync failed. Please refresh the page."
+        );
+      }
     } catch (err: any) {
       setTxStatus("error");
       setTxError(err?.message || "Failed to dispute outcome");
@@ -211,6 +253,26 @@ export default function OracleMarketDetailModal({
 
       setTxHash(hash);
       setTxStatus("success");
+
+      // ISSUE #3 RESOLUTION: Sync oracle resolution to database
+      console.log(`[ORACLE MODAL] Syncing resolution for market ${market.id}`);
+      const syncSuccess = await syncOracleToDatabase(
+        "resolve",
+        market.id,
+        hash as `0x${string}`,
+        {
+          finalOutcome: selectedOutcome,
+        }
+      );
+
+      if (!syncSuccess) {
+        console.error(
+          "[ORACLE MODAL] Resolution syncing failed - database may be out of sync"
+        );
+        setTxError(
+          "Resolution confirmed but database sync failed. Please refresh the page."
+        );
+      }
     } catch (err: any) {
       setTxStatus("error");
       setTxError(err?.message || "Failed to resolve outcome");
@@ -232,6 +294,28 @@ export default function OracleMarketDetailModal({
 
       setTxHash(hash);
       setTxStatus("success");
+
+      // ISSUE #4 RESOLUTION: Sync oracle finalization to database
+      console.log(
+        `[ORACLE MODAL] Syncing finalization for market ${market.id}`
+      );
+      const syncSuccess = await syncOracleToDatabase(
+        "finalize",
+        market.id,
+        hash as `0x${string}`,
+        {
+          finalOutcome: market.oracleEvent?.proposed || "YES",
+        }
+      );
+
+      if (!syncSuccess) {
+        console.error(
+          "[ORACLE MODAL] Finalization syncing failed - database may be out of sync"
+        );
+        setTxError(
+          "Finalization confirmed but database sync failed. Please refresh the page."
+        );
+      }
     } catch (err: any) {
       setTxStatus("error");
       setTxError(err?.message || "Failed to finalize outcome");
