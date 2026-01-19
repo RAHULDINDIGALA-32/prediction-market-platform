@@ -29,7 +29,7 @@ interface UnsignedQuoteResponse {
         amount: string;
         cost: string;
         isSell: boolean;
-        deadline: number;
+        deadline: string;
         nonce: string;
         minAmountOut: string;
         minReturn: string;
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<UnsignedQ
 
         // QuoteVerifier enforces: quote.nonce > traderNonces[trader][market]
       
-        const nextNonce = traderNonce.lastNonce + BigInt(1);
+        const lastNonce = traderNonce.lastNonce;
 
         // Convert frontend outcome (0 | 1) to contract enum (1 | 2)
         // Frontend: 0 = YES, 1 = NO
@@ -229,7 +229,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<UnsignedQ
             toBigInt(market.qYes),
             toBigInt(market.qNo),
             toBigInt(market.lmsrB),
-            nextNonce,
+            lastNonce,
             minAmountOut,
             minReturn
         );
@@ -253,7 +253,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<UnsignedQ
                     amount: quoteData.amount.toString(),
                     cost: quoteData.cost.toString(),
                     isSell: quoteData.isSell,
-                    deadline: quoteData.deadline,
+                    deadline: quoteData.deadline.toString(),
                     nonce: quoteData.nonce.toString(),
                     minAmountOut: quoteData.minAmountOut.toString(),
                     minReturn: quoteData.minReturn.toString(),

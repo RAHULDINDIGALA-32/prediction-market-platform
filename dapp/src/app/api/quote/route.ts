@@ -16,7 +16,7 @@ const QUOTE_VERIFIER_ADDRESS = process.env.NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS;
 interface QuoteRequest {
     marketId: string;
     trader: string;
-    outcome: 0 | 1; // 0 = YES, 1 = NO
+    outcome: 1 | 2; // 1 = YES, 2 = NO
     amount: string; // Wei as string
     isSell: boolean;
 }
@@ -26,11 +26,11 @@ interface QuoteResponse {
     quote?: {
         trader: string;
         market: string;
-        outcome: 0 | 1;
+        outcome: 1 | 2;
         amount: string;
         cost: string;
         isSell: boolean;
-        deadline: number;
+        deadline: bigint;
         nonce: string;
         minAmountOut: string;    
         minReturn: string;       
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<QuoteResp
         }
 
         // Validate outcome
-        if (body.outcome !== 0 && body.outcome !== 1) {
+        if (body.outcome !== 1 && body.outcome !== 2) {
             return NextResponse.json(
                 { success: false, error: "Invalid outcome (must be 0 or 1)" },
                 { status: 400 }

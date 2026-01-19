@@ -121,12 +121,6 @@ export async function POST(request: NextRequest) {
 
 /**
  * Handle oracle proposal sync
- * ISSUE #1 RESOLUTION: Creates OracleEvent in database when outcome is proposed
- *
- * Updates:
- * 1. Create OracleEvent with proposer and proposed outcome
- * 2. Update Market status to CLOSED (trading closes)
- * 3. Store transaction hash and block for audit trail
  */
 async function handlePropose(
   marketId: string,
@@ -199,13 +193,6 @@ async function handlePropose(
 
 /**
  * Handle oracle dispute sync
- * ISSUE #2 RESOLUTION: Updates OracleEvent with dispute information
- *
- * Updates:
- * 1. Mark oracle event as disputed
- * 2. Record disputer address
- * 3. Set dispute timestamp
- * 4. Store dispute transaction hash and block
  */
 async function handleDispute(
   marketId: string,
@@ -276,14 +263,6 @@ async function handleDispute(
 
 /**
  * Handle oracle resolution sync
- * ISSUE #3 RESOLUTION: Updates OracleEvent with finalized outcome
- *
- * Updates:
- * 1. Mark oracle event as finalized
- * 2. Set final outcome
- * 3. Record resolution timestamp
- * 4. Update Market status to RESOLVED
- * 5. Store resolution transaction hash and block
  */
 async function handleResolve(
   marketId: string,
@@ -364,13 +343,6 @@ async function handleResolve(
 
 /**
  * Handle oracle finalization sync (undisputed outcomes)
- * ISSUE #4 RESOLUTION: Finalizes undisputed outcomes after dispute window
- *
- * Updates:
- * 1. Mark oracle event as finalized
- * 2. Set final outcome
- * 3. Update Market status to RESOLVED
- * 4. Store finalization transaction hash and block
  */
 async function handleFinalize(
   marketId: string,

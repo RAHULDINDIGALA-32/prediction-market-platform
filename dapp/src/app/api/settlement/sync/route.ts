@@ -128,13 +128,6 @@ export async function POST(request: NextRequest) {
 
 /**
  * Handle token redemption sync
- * ISSUE #5 RESOLUTION: Creates audit trail for token redemptions
- *
- * Updates:
- * 1. Create RedemptionEvent for audit trail
- * 2. Store user address and amount redeemed
- * 3. Record transaction hash and block number
- * 4. Prevent double-spending by checking transaction hash uniqueness
  */
 async function handleRedeem(
   marketId: string,
@@ -193,7 +186,6 @@ async function handleRedeem(
 
 /**
  * Handle creator withdrawal sync
- * ISSUE #6 RESOLUTION: Updates market to SETTLED after creator withdrawal
  *
  * Updates:
  * 1. Update Market status to SETTLED

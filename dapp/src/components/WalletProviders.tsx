@@ -46,4 +46,4 @@ const WalletProviders = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export default WalletProviders;
+export {config, WalletProviders};

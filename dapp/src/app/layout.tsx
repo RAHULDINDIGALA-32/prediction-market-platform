@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import WalletProviders from "@/components/WalletProviders";
+import {WalletProviders} from "@/components/WalletProviders";
 import "@rainbow-me/rainbowkit/styles.css";
 //import { initializeServices } from "@/lib/initializeServices";
 

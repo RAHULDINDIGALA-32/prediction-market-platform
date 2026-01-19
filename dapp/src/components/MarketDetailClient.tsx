@@ -13,6 +13,7 @@ import { useMarketInfo, useMarketProbabilities, useUserPositions, useEthBalance 
 import { useUnsignedQuote, signQuote } from "@/hooks/useQuote";
 import { calculateProbability, formatEth, formatTimeRemaining, formatAddress } from "@/lib/utils";
 import { parseContractError } from "@/lib/errors";
+import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
 import { AlertTriangle, Clock, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle, Loader } from "lucide-react";
 import TradeConfirmationModal from "@/components/TradeConfirmationModal";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
@@ -244,12 +245,12 @@ export default function MarketDetailClient({ market }: Props) {
       const quoteStruct = {
         trader: signedQuote.quote.trader as `0x${string}`,
         market: signedQuote.quote.market as `0x${string}`,
-        outcome: signedQuote.quote.outcome, // Already contract enum (1 or 2) - signature was computed over this value
+        outcome: signedQuote.quote.outcome as 1 | 2, // Already contract enum (1 or 2) - signature was computed over this value
         amount: BigInt(signedQuote.quote.amount),
         cost: BigInt(signedQuote.quote.cost),
         deadline: BigInt(signedQuote.quote.deadline),
         nonce: BigInt(signedQuote.quote.nonce),
-        isSell: signedQuote.quote.isSell,
+        isSell: signedQuote.quote.isSell as boolean,
         minAmountOut: BigInt(signedQuote.quote.minAmountOut ?? 0),
         minReturn: BigInt(signedQuote.quote.minReturn ?? 0),
       };
@@ -263,6 +264,26 @@ export default function MarketDetailClient({ market }: Props) {
       if (!signedQuote.quote.isSell && value !== BigInt(signedQuote.quote.cost)) {
         throw new Error("Value mismatch: ETH amount must exactly match quote cost");
       }
+
+      // Step 3: Debug - simulate the transaction first
+      // try {
+      //   const recoveredSigner = recoverSigner(quoteStruct, signedQuote.signature as `0x${string}`);
+      //   console.log("Recovered signer:", recoveredSigner);
+
+      //   await simulateExecuteTrade(
+      //     signedQuote.quote.market as `0x${string}`,
+      //     quoteStruct,
+      //     signedQuote.signature as `0x${string}`,
+      //     BigInt(signedQuote.quote.minAmountOut ?? 0),
+      //     BigInt(signedQuote.quote.minReturn ?? 0),
+      //     value
+      //   );
+      //   console.log("✅ Debug simulation passed - proceeding with actual transaction");
+      // } catch (simError) {
+      //   console.error("🚨 Debug simulation failed - transaction would likely fail:", simError);
+      //   // For debugging, you might want to continue or stop here
+      //   // For now, we'll continue but log the warning
+      // }
 
       setTxStatus("pending");
 
@@ -286,7 +307,6 @@ export default function MarketDetailClient({ market }: Props) {
       console.error("Trade execution failed:", error);
       setTxStatus("failed");
 
-      // Detailed error parsing
       let errorMessage = "Trade execution failed. Please try again.";
       
       if (error?.message?.includes("User rejected")) {

@@ -10,7 +10,7 @@ export interface UnsignedQuote {
     outcome: 0 | 1;  // Frontend format: YES=0, NO=1
     amount: string;
     cost: string;
-    deadline: number;
+    deadline: bigint;
     nonce: string;
     isSell: boolean;
     minAmountOut?: string;
@@ -28,7 +28,7 @@ export interface SignedQuote {
     outcome: 1 | 2;  // Contract format: YES=1, NO=2 (converted during signing)
     amount: string;
     cost: string;
-    deadline: number;
+    deadline: bigint;
     nonce: string;
     isSell: boolean;
     minAmountOut?: string;

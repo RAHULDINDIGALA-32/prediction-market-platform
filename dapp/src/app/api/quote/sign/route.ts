@@ -11,12 +11,12 @@ import { ethers } from "ethers";
 import { Decimal } from "@prisma/client/runtime/library";
 
 interface SignQuoteRequest {
-    marketId: string;
-    trader: string;
+    marketId: `0x${string}`;
+    trader: `0x${string}`;
     outcome: 0 | 1;
     amount: string; // Wei as string
     cost: string; // Wei as string
-    deadline: number;
+    deadline: string;
     nonce: string;
     isSell: boolean;
     minAmountOut: string;
@@ -27,13 +27,13 @@ interface SignQuoteRequest {
 interface SignedQuoteResponse {
     success: boolean;
     quote?: {
-        trader: string;
-        market: string;
+        trader: `0x${string}`;
+        market: `0x${string}`;
         outcome: 1 | 2;  // Contract enum: YES=1, NO=2
         amount: string;
         cost: string;
         isSell: boolean;
-        deadline: number;
+        deadline: string;
         nonce: string;
         minAmountOut: string;
         minReturn: string;
@@ -56,7 +56,7 @@ interface SignedQuoteResponse {
  */
 export async function POST(request: NextRequest): Promise<NextResponse<SignedQuoteResponse>> {
     try {
-        const QUOTE_VERIFIER_ADDRESS = process.env.NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS;
+        const QUOTE_VERIFIER_ADDRESS = process.env.NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS as `0x${string}`;
 
         if (!QUOTE_VERIFIER_ADDRESS) {
             console.error(
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignedQuo
         }
 
         // Verify quote is still valid (deadline hasn't passed)
-        if (body.deadline * 1000 < Date.now()) {
+        if (BigInt(body.deadline) * 1000n < BigInt(Date.now())) {
             return NextResponse.json(
                 { success: false, error: "Quote has expired" },
                 { status: 400 }
@@ -225,11 +225,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignedQuo
         // to match what the on-chain contract verifies
         const quoteData = {
             trader: body.trader,
-            market: market.contractAddress!,
+            market: market.contractAddress! as `0x${string}`,
             outcome: contractOutcome,  // Contract enum: 1 or 2
             amount,
             cost,
-            deadline: body.deadline,
+            deadline: BigInt(body.deadline),
             nonce,
             isSell: body.isSell,
             minAmountOut: BigInt(body.minAmountOut),
@@ -286,7 +286,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignedQuo
                     amount: signedQuote.amount.toString(),
                     cost: signedQuote.cost.toString(),
                     isSell: signedQuote.isSell,
-                    deadline: signedQuote.deadline,
+                    deadline: signedQuote.deadline.toString(),
                     nonce: signedQuote.nonce.toString(),
                     minAmountOut: signedQuote.minAmountOut.toString(),
                     minReturn: signedQuote.minReturn.toString(),
