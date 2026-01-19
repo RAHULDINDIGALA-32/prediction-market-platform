@@ -28,7 +28,6 @@ interface Props {
   initialMarkets: Market[];
 }
 
-type SortOption = "newest" | "volume" | "ending-soon" | "probability";
 type CategoryOption = "all" | "crypto" | "politics" | "sports" | "economics" | "other";
 
 export default function MarketsListClient({ initialMarkets }: Props) {

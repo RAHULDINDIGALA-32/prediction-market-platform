@@ -1,5 +1,5 @@
 import AppShell from "@/components/NavBar";
-import OraclePanel from "@/components/roles/OraclePanel";
+import OracleMarketsClient from "@/components/OracleMarketsClient";
 
 export default function OraclePage() {
   return (
@@ -9,13 +9,13 @@ export default function OraclePage() {
           Oracle & Resolution
         </h1>
         <p className="max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
-          Propose and dispute outcomes for expired markets using the optimistic
-          oracle. Only authorized resolvers can resolve disputes, but anyone can
-          propose outcomes and post bonds according to the configured parameters.
+          Participate in the oracle resolution process. Propose outcomes for closed markets,
+          dispute proposed outcomes within the dispute window, or resolve disputes if you're an
+          authorized resolver. Anyone can finalize undisputed outcomes after the dispute window closes.
         </p>
       </section>
 
-      <OraclePanel />
+      <OracleMarketsClient />
     </AppShell>
   );
 }
