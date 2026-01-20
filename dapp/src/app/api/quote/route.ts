@@ -11,7 +11,7 @@ import { getSignerWallet, listAuthorizedSigners } from "@/lib/signerManagement";
 import { ethers } from "ethers";
 import { Decimal } from "@prisma/client/runtime/library";
 
-const QUOTE_VERIFIER_ADDRESS = process.env.NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS;
+const QUOTE_VERIFIER_ADDRESS = process.env.NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS as `0x${string}`;
 
 interface QuoteRequest {
     marketId: string;

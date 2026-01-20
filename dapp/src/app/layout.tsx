@@ -16,8 +16,22 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Prediction Markets",
+  title: "0x01 Markets",
   description: "On-chain binary markets with optimistic oracle",
+  applicationName: "0x01 Markets",
+  creator: "Rahul Dindigala",
+  authors: [
+    {
+      name: "Rahul Dindigala",
+      url: "https://github.com/RAHULDINDIGALA-32",
+    },
+  ],
+
+   other: {
+    "developer:sourceCode": "https://github.com/RAHULDINDIGALA-32/0x01-markets",
+  },
+
+ 
 };
 
 // Initialize background services on app startup

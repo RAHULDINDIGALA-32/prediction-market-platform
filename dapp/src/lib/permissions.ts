@@ -1,6 +1,16 @@
 import { prisma } from "@/lib/db";
 import { ethers } from "ethers";
 
+
+export interface Creator {
+  id: string;
+  address: string;
+  isWhitelisted: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+
 const ADMIN_ADDRESS = (() => {
   const addr = process.env.ADMIN_ADDRESS?.toLowerCase();
   if (addr && !ethers.isAddress(addr)) {
@@ -78,9 +88,10 @@ export async function removeCreator(address: string) {
 /**
  * Get all whitelisted creators
  */
-export async function getAllCreators() {
+export async function getAllCreators(): Promise<Creator[]> {
   return prisma.whitelistedCreator.findMany({
     where: { isWhitelisted: true },
     orderBy: { createdAt: "desc" },
   });
 }
+

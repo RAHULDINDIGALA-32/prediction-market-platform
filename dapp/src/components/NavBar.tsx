@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import CreatorNavLink from "./CreatorNavLink";
@@ -31,17 +32,28 @@ export default function NavBar({ children }: Props) {
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
       <header className="border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link href="/" className="text-lg font-bold">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white dark:bg-zinc-50 dark:text-zinc-900">
-                PM
+          <Link href="/" className="text-lg font-bold ">
+            <div className="flex items-center gap-3 ">
+              {/* Logo */}
+              <div className="relative h-11 w-11">
+                <Image
+                  src="/logo.png"
+                  alt="0x01 Markets Logo"
+                  fill
+                  className="rounded-full object-contain"
+                  priority
+                />
               </div>
+
+              {/* Name */}
               <div>
                 <div className="text-sm font-semibold tracking-tight">
-                  Prediction Markets
+                  <span className="font-mono tabular-nums">0x01</span>{" "}
+                  <span>Markets</span>
                 </div>
+
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  On-chain Binary Markets
+                On-chain Binary Markets
                 </p>
               </div>
             </div>
@@ -50,7 +62,7 @@ export default function NavBar({ children }: Props) {
           <nav className="hidden items-center gap-2 text-sm font-medium sm:flex">
             {routes.map((route) => {
               if (route.requiresCreator || route.requiresAdmin) {
-                return null; // Will be handled by specialized components
+                return null; 
               }
               const isActive =
                 route.href === "/"
@@ -93,7 +105,8 @@ export default function NavBar({ children }: Props) {
           </div>
         </div>
       </header>
-
+      
+      {/* Main Content */}
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">{children}</main>
     </div>
   );

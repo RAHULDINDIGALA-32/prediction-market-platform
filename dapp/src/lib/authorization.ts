@@ -154,7 +154,7 @@ export async function verifyWithContract(
   try {
     switch (checkType) {
       case "creator": {
-        const marketFactoryAddress = process.env.MARKET_FACTORY_ADDRESS;
+        const marketFactoryAddress = process.env.NEXT_PUBLIC_MARKET_FACTORY_ADDRESS;
         if (!marketFactoryAddress) {
           console.warn("MARKET_FACTORY_ADDRESS not configured");
           return false;
@@ -170,7 +170,7 @@ export async function verifyWithContract(
       }
 
       case "signer": {
-        const quoteVerifierAddress = process.env.QUOTE_VERIFIER_ADDRESS;
+        const quoteVerifierAddress = process.env.NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS;
         if (!quoteVerifierAddress) {
           console.warn("QUOTE_VERIFIER_ADDRESS not configured");
           return false;
@@ -186,7 +186,7 @@ export async function verifyWithContract(
       }
 
       case "resolver": {
-        const oracleAdapterAddress = process.env.ORACLE_ADAPTER_ADDRESS;
+        const oracleAdapterAddress = process.env.NEXT_PUBLIC_ORACLE_ADAPTER_ADDRESS;
         if (!oracleAdapterAddress) {
           console.warn("ORACLE_ADAPTER_ADDRESS not configured");
           return false;
@@ -253,7 +253,7 @@ export async function isAuthorizedSafe(
           update: { isWhitelisted: true },
           create: { address: lowerAddress, isWhitelisted: true },
         })
-        .catch((err) =>
+        .catch((err: unknown) =>
           console.error("Failed to update creator cache:", err)
         );
     } else if (checkType === "signer") {
@@ -261,9 +261,9 @@ export async function isAuthorizedSafe(
         .upsert({
           where: { address: lowerAddress },
           update: { isAllowed: true },
-          create: { address: lowerAddress, isAllowed: true },
+          create: { address: lowerAddress, isAllowed: true, privateKey: "" },
         })
-        .catch((err) => console.error("Failed to update signer cache:", err));
+        .catch((err: unknown) => console.error("Failed to update signer cache:", err));
     } else {
       await prisma.oracleResolver
         .upsert({
@@ -271,7 +271,7 @@ export async function isAuthorizedSafe(
           update: { isAllowed: true },
           create: { address: lowerAddress, isAllowed: true },
         })
-        .catch((err) =>
+        .catch((err: unknown) =>
           console.error("Failed to update resolver cache:", err)
         );
     }

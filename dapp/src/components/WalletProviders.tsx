@@ -4,6 +4,7 @@ import "@rainbow-me/rainbowkit/styles.css";
 import {
   getDefaultConfig,
   RainbowKitProvider,
+  lightTheme
 } from "@rainbow-me/rainbowkit";
 import { WagmiProvider } from "wagmi";
 import {
@@ -38,7 +39,15 @@ const WalletProviders = ({ children }: { children: React.ReactNode }) => {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>
+        <RainbowKitProvider
+        theme={lightTheme({
+      accentColor: 'white',
+      accentColorForeground: 'black',
+      borderRadius: 'small',
+      fontStack: 'system',
+      overlayBlur: 'small',
+    })}
+        >
           {children}
         </RainbowKitProvider>
       </QueryClientProvider>

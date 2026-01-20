@@ -265,7 +265,7 @@ export class AuthorizationSyncService {
         await prisma.authorizedSigner.upsert({
           where: { address: signerAddr },
           update: { isAllowed: true, updatedAt: new Date() },
-          create: { address: signerAddr, isAllowed: true, },
+          create: { address: signerAddr, isAllowed: true, privateKey: "" },
         });
 
         authorizationCache.setSigner(signerAddr, true, this.config.cacheTTL);

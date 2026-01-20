@@ -1,7 +1,6 @@
 "use client";
 
 import { useAccount } from "wagmi";
-import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -16,19 +15,13 @@ export default function AdminOnlyNavLink({ href, label }: Props) {
   const pathname = usePathname();
   const isActive = pathname === href;
 
-  const { data: isAdmin } = useQuery({
-    queryKey: ["isAdmin", address],
-    queryFn: async () => {
-      if (!address) return false;
-      const res = await fetch(`/api/admin/check-creator?address=${address}`);
-      if (!res.ok) return false;
-      const data = await res.json();
-      return data.isAdmin;
-    },
-    enabled: !!address,
-  });
+  const adminAddress = process.env.NEXT_PUBLIC_ADMIN_ADDRESS?.toLowerCase();
+  if(!adminAddress) {
+    return null;
+  }
 
-  if (!isAdmin) {
+  const isAuthorized = address?.toLowerCase() === adminAddress;
+  if (!isAuthorized) {
     return null;
   }
 

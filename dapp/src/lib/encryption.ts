@@ -11,7 +11,7 @@ const ENCODING = 'hex';
 /**
  * Encrypt sensitive data
  * @param plaintext Data to encrypt
- * @param encryptionKey 32-byte hex key (use process.env.ENCRYPTION_KEY)
+ * @param encryptionKey 32-byte hex key (use process.env.NEXT_PUBLIC_ENCRYPTION_KEY)
  * @returns Encrypted data with nonce: "nonce:encrypted:authTag"
  */
 export function encrypt(plaintext: string, encryptionKey: string): string {

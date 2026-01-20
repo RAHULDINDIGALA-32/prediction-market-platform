@@ -24,7 +24,7 @@ export async function GET() {
         const creators = await getAllCreators();
         return NextResponse.json({
             success: true,
-            creators: creators.map(c => ({
+            creators: creators.map(c=> ({
                 id: c.id,
                 address: c.address,
                 isWhitelisted: c.isWhitelisted,
