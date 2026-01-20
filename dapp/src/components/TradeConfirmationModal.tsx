@@ -13,7 +13,7 @@ interface Quote {
     outcome: number;
     amount: string;
     cost: string;
-    deadline: number;
+    deadline: bigint;
     nonce: string;
     isSell: boolean;
     minAmountOut?: string;
@@ -41,7 +41,7 @@ export default function TradeConfirmationModal({
   onCancel,
   isPending = false,
 }: Props) {
-  const deadline = new Date(quote.quote.deadline * 1000);
+  const deadline = new Date(Number(quote.quote.deadline) * 1000);
   const timeUntilExpiry = deadline.getTime() - Date.now();
   const secondsRemaining = Math.max(0, Math.floor(timeUntilExpiry / 1000));
 

@@ -54,22 +54,22 @@ const ERC20_ABI = [
   },
 ] as const;
 
-const ORACLE_ABI = [
-  {
-    type: "function",
-    name: "getFinalOutcome",
-    stateMutability: "view",
-    inputs: [{ name: "market", type: "address" }],
-    outputs: [{ type: "uint8" }],
-  },
-  {
-    type: "function",
-    name: "isFinalized",
-    stateMutability: "view",
-    inputs: [{ name: "market", type: "address" }],
-    outputs: [{ type: "bool" }],
-  },
-] as const;
+// const ORACLE_ABI = [
+//   {
+//     type: "function",
+//     name: "getFinalOutcome",
+//     stateMutability: "view",
+//     inputs: [{ name: "market", type: "address" }],
+//     outputs: [{ type: "uint8" }],
+//   },
+//   {
+//     type: "function",
+//     name: "isFinalized",
+//     stateMutability: "view",
+//     inputs: [{ name: "market", type: "address" }],
+//     outputs: [{ type: "bool" }],
+//   },
+// ] as const;
 
 interface Market {
   id: string;
@@ -129,7 +129,7 @@ export default function SettlementClient({ market }: Props) {
         functionName: "redeem",
         args: [marketAddress, BigInt(redeemAmount)],
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Redemption failed:", error);
     }
   };

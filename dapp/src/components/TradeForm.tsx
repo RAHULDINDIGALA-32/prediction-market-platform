@@ -149,8 +149,9 @@ export default function TradeForm({ initialMarketId, compact }: Props) {
       });
 
       setStatus(`Transaction submitted: ${txHash}`);
-    } catch (err: any) {
-      setError(err?.message ?? String(err));
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage);
       setStatus(null);
     }
   }

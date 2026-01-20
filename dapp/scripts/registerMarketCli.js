@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports */
 const fetch = require('node-fetch');
 
 async function main() {
@@ -11,8 +12,7 @@ async function main() {
   const apiUrl = process.env.SERVER_URL || 'http://localhost:3000/api/admin/registerMarket';
   const adminSecret = process.env.ADMIN_SECRET || '';
 
-  const fetchFn = globalThis.fetch || (await import('node-fetch')).default;
-  const res = await fetchFn(apiUrl, {
+  const res = await fetch(apiUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-admin-secret': adminSecret },
     body: JSON.stringify({ marketId, contractAddress }),

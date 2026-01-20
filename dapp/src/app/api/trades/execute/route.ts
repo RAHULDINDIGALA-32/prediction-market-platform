@@ -118,9 +118,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
       if (amountBigInt <= 0n || costBigInt < 0n) {
         throw new Error('Amount and cost must be non-negative');
       }
-    } catch (err) {
+    } catch (_err) {
       return NextResponse.json(
-        { success: false, error: 'Invalid numeric values' },
+        { success: false, error: `Invalid numeric values: ${_err}` },
         { status: 400 }
       );
     }
@@ -204,7 +204,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
         expectedVersion: marketVersion,
         trader,
         isSell,
-      } as any);
+      });
 
       // Mark signed quote as committed
       await prisma.signedQuote.upsert({
@@ -249,21 +249,23 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
         },
         { status: 201 }
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Trade execution failed";
       return NextResponse.json(
         {
           success: false,
-          error: error.message || 'Trade execution failed',
+          error: errorMessage,
         },
         { status: 400 }
       );
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Trade execution error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: errorMessage,
       },
       { status: 500 }
     );

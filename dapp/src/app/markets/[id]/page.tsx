@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { notFound } from "next/navigation";
 import NavBar from "@/components/NavBar";
 import MarketDetailClient from "@/components/MarketDetailClient";
+import { Decimal } from "@prisma/client/runtime/library";
 
 async function getMarket(id: string) {
   try {
@@ -27,13 +28,13 @@ async function getMarket(id: string) {
       subsidyAmount: market.subsidyAmount ? market.subsidyAmount.toString() : null,
       trades: market.trades.map(trade => ({
         ...trade,
-        priceYes: trade.priceYes.toString(),
-        priceNo: trade.priceNo.toString(),
-        amount: trade.amount.toString(),
-        cost: trade.cost.toString(),
+        //priceYes: trade.priceYes.toString(),
+        //priceNo: trade.priceNo.toString(),
+        amount: Decimal(trade.amount),
+        cost: Decimal(trade.cost),
       })),
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }

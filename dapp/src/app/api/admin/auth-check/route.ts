@@ -35,15 +35,15 @@ export async function GET(req: NextRequest): Promise<NextResponse<AuthCheckRespo
   try {
     const { searchParams } = new URL(req.url);
     const address = searchParams.get("address");
-    const type = searchParams.get("type") as "creator" | "signer" | "resolver" | null;
+    const type = searchParams.get("type") as "creator" | "signer" | "resolver" ;
 
     // Validate inputs
     if (!address || !type) {
       return NextResponse.json(
         {
           success: false,
-          address: address || "unknown",
-          type: (type as any) || "unknown",
+          address: address || "0x0000000000000000000000000000000000000000",
+          type: type,
           isAuthorized: false,
           cached: false,
           error: "Missing required parameters: address, type",
@@ -104,8 +104,9 @@ export async function GET(req: NextRequest): Promise<NextResponse<AuthCheckRespo
       isAuthorized,
       cached: true, // All lookups use cache-first strategy
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Authorization check error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Internal server error";
 
     return NextResponse.json(
       {
@@ -114,7 +115,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<AuthCheckRespo
         type: "creator",
         isAuthorized: false,
         cached: false,
-        error: error.message || "Internal server error",
+        error: errorMessage,
       },
       { status: 500 }
     );

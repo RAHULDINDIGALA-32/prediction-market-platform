@@ -1,6 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
 import { useReadContract, useReadContracts, useBalance } from "wagmi";
-import { formatEther } from "viem";
 import { calculateProbability } from "@/lib/utils";
 
 const ERC20_ABI = [

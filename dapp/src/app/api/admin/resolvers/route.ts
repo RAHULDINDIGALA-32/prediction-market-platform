@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
  * GET /api/admin/resolvers
  * Fetch all oracle resolvers
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const resolvers = await prisma.oracleResolver.findMany({
       where: { isAllowed: true },

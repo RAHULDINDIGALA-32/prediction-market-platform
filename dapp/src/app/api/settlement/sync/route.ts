@@ -110,15 +110,19 @@ export async function POST(request: NextRequest) {
       marketId,
       ...result,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorName = error instanceof Error ? error.name : "Unknown";
+    const errorStack = error instanceof Error ? error.stack : "";
+    
     console.error(
-      `[SETTLEMENT SYNC ERROR] Error type: ${error.name}, Message: ${error.message}, Stack: ${error.stack}`
+      `[SETTLEMENT SYNC ERROR] Error type: ${errorName}, Message: ${errorMessage}, Stack: ${errorStack}`
     );
 
     return NextResponse.json(
       {
         success: false,
-        error: error?.message || "Sync operation failed",
+        error: errorMessage || "Sync operation failed",
         action: "sync",
       },
       { status: 500 }
@@ -133,9 +137,9 @@ async function handleRedeem(
   marketId: string,
   transactionHash: string,
   blockNumber: number,
-  data: any
+  data: unknown
 ) {
-  const { user, amount } = data;
+  const { user, amount } = data as Record<string, unknown>;
 
   if (!user || !amount) {
     throw new Error("Missing required fields: user, amount");
@@ -161,8 +165,8 @@ async function handleRedeem(
   const redemptionEvent = await prisma.redemptionEvent.create({
     data: {
       marketId,
-      user,
-      amount: BigInt(amount),
+      user: user as string,
+      amount: BigInt(amount as string),
       transactionHash,
       blockNumber: BigInt(blockNumber),
       createdAt: new Date(),
@@ -197,9 +201,9 @@ async function handleWithdraw(
   marketId: string,
   transactionHash: string,
   blockNumber: number,
-  data: any
+  data: unknown
 ) {
-  const { creator, amountWithdrawn } = data;
+  const { creator, amountWithdrawn } = data as { creator: unknown; amountWithdrawn: unknown };
 
   if (!creator) {
     throw new Error("Missing required field: creator");
@@ -225,8 +229,8 @@ async function handleWithdraw(
   const settlementEvent = await prisma.settlementEvent.create({
     data: {
       marketId,
-      creator,
-      amountWithdrawn: amountWithdrawn ? BigInt(amountWithdrawn) : 0n,
+      creator: creator as string,
+      amountWithdrawn: amountWithdrawn ? BigInt(amountWithdrawn as string) : 0n,
       transactionHash,
       blockNumber: BigInt(blockNumber),
       createdAt: new Date(),

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const fetch = require('node-fetch');
 
 // Simple integration test script. Assumes your Next dev server is running at http://localhost:3000

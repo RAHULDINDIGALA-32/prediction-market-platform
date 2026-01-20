@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
     }) as MarketWithRelations[];
 
     // Helper to serialize BigInt values to strings
-    const serializeData = (data: any) => {
+    const serializeData = (data: unknown) => {
       return JSON.parse(
         JSON.stringify(data, (key, value) =>
           typeof value === "bigint" ? value.toString() : value

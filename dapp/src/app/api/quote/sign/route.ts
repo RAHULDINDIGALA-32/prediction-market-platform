@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { signTradeQuote, isQuoteValid } from "@/lib/quoteGeneration";
+import { signTradeQuote } from "@/lib/quoteGeneration";
 import { getSignerWallet, listAuthorizedSigners } from "@/lib/signerManagement";
 import { ethers } from "ethers";
 import { Decimal } from "@prisma/client/runtime/library";

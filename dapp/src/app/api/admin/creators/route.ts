@@ -19,7 +19,7 @@ interface CreatorWhitelistRequest {
  * GET /api/admin/creators
  * List all whitelisted creators
  */
-export async function GET(req: NextRequest) {
+export async function GET() {
     try {
         const creators = await getAllCreators();
         return NextResponse.json({
@@ -32,10 +32,11 @@ export async function GET(req: NextRequest) {
                 updatedAt: c.updatedAt,
             })),
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Failed to fetch creators:", error);
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
         return NextResponse.json(
-            { success: false, error: "Internal server error", details: error.message },
+            { success: false, error: "Internal server error", details: errorMessage },
             { status: 500 }
         );
     }
@@ -110,10 +111,11 @@ export async function POST(req: NextRequest) {
                 { status: 200 }
             );
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Creator whitelist error:", error);
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
         return NextResponse.json(
-            { success: false, error: "Internal server error", details: error.message },
+            { success: false, error: "Internal server error", details: errorMessage },
             { status: 500 }
         );
     }

@@ -6,7 +6,8 @@ export async function POST(req: Request) {
   try {
     const result = await executeTrade(body);
     return NextResponse.json({ ok: true, result });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ ok: false, error: err.message }), { status: 400 });
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    return new Response(JSON.stringify({ ok: false, error: errorMessage }), { status: 400 });
   }
 }

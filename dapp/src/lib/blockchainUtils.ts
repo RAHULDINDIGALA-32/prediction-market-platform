@@ -35,7 +35,7 @@ export async function getBlockNumberFromTx(
     }
 
     return Number(receipt.blockNumber);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[BLOCKCHAIN UTIL] Failed to get block number from tx ${txHash}:`, error);
     throw error;
   }
@@ -61,20 +61,20 @@ export async function waitForTxConfirmation(
           `[BLOCKCHAIN UTIL] Transaction ${txHash} confirmed at block ${blockNumber}`
         );
         return blockNumber;
-      } catch (error) {
-        attempts++;
-        if (attempts >= maxAttempts) {
-          throw new Error(
-            `Transaction confirmation timeout after ${maxAttempts} attempts`
-          );
-        }
-        // Wait 1 second before retrying
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+  } catch (_error: unknown) {
+    attempts++;
+    if (attempts >= maxAttempts) {
+      throw new Error(
+        `Transaction confirmation timeout after ${maxAttempts} attempts. Error ${_error}`
+      );
+    }
+    // Wait 1 second before retrying
+    await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
 
     throw new Error("Failed to confirm transaction");
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[BLOCKCHAIN UTIL] Transaction confirmation failed:`, error);
     throw error;
   }
@@ -92,7 +92,7 @@ export async function syncOracleToDatabase(
   action: "propose" | "dispute" | "resolve" | "finalize",
   marketId: string,
   txHash: `0x${string}`,
-  data: Record<string, any>
+  data: Record<string, unknown>
 ): Promise<boolean> {
   const maxRetries = 3;
   let attempts = 0;
@@ -173,7 +173,7 @@ export async function syncSettlementToDatabase(
   action: "redeem" | "withdraw",
   marketId: string,
   txHash: `0x${string}`,
-  data: Record<string, any>
+  data: Record<string, unknown>
 ): Promise<boolean> {
   const maxRetries = 3;
   let attempts = 0;
@@ -265,7 +265,7 @@ export async function isTxHashUnique(
         LIMIT 1
       `;
 
-      return (existingEvent as any[]).length === 0;
+      return (existingEvent as string[]).length === 0;
     } else {
       // Check in RedemptionEvent and SettlementEvent
       const { prisma } = await import("@/lib/db");

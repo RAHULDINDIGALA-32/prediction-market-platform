@@ -11,7 +11,7 @@
  * - Last error message
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSyncService } from "@/lib/authorizationSyncService";
 import { authorizationCache } from "@/lib/authorizationCache";
 
@@ -50,9 +50,8 @@ interface SyncStatusResponse {
   error?: string;
 }
 
-export async function GET(
-  req: NextRequest
-): Promise<NextResponse<SyncStatusResponse>> {
+
+export async function GET(): Promise<NextResponse<SyncStatusResponse>> {
   try {
     // Get sync service metrics
     const syncService = getSyncService();
@@ -94,8 +93,9 @@ export async function GET(
         totalSize: cacheStats.totalSize,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Sync status check error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Internal server error";
 
     return NextResponse.json(
       {
@@ -115,7 +115,7 @@ export async function GET(
           resolvers: { hits: 0, misses: 0, hitRate: 0, size: 0 },
           totalSize: 0,
         },
-        error: error.message || "Internal server error",
+        error: errorMessage,
       },
       { status: 500 }
     );

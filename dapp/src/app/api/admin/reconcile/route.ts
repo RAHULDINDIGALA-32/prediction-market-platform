@@ -18,39 +18,62 @@ export async function POST(req: Request) {
   if (signed.status === 'COMMITTED') return NextResponse.json({ ok: true, already: true });
 
   // Build executeTrade payload from signed quote
-  const side = signed.isSell ? (signed.minReturn && BigInt(signed.minReturn.toString()) > 0n ? 'YES' : 'YES') : 'YES';
+  //const side = signed.isSell ? (signed.minReturn && BigInt(signed.minReturn.toString()) > 0n ? 'YES' : 'YES') : 'YES';
   // Determine side from stored amount? We need to infer side from scope: signedQuote doesn't store outcome; look up trade by quoteHash is not available.
   // For now, require the event payload to be passed for reconciliation.
 
   const event = body.event;
   if (!event) return new Response('missing event payload (outcome/amount)', { status: 400 });
 
-  const { trader, marketId, outcome, amount, cost, nonce, isSell, marketVersion } = event;
+  const { trader, marketId, outcome, amount, cost, isSell, marketVersion } = event;
 
   try {
     // Call the server-side executeTrade to apply DB changes atomically
     await executeTrade({
       marketId,
       side: outcome === 0 ? 'YES' : 'NO',
-      amount: new Decimal(amount.toString()),
-      expectedCost: new Decimal(cost.toString()),
+      amount: new Decimal(amount),
+      expectedCost: new Decimal(cost),
       expectedVersion: marketVersion,
       trader,
       isSell: Boolean(isSell),
-    } as any);
+    });
+
 
     // Mark signed quote committed and update trader nonce
-    await prisma.$transaction(async (tx: typeof prisma) => {
-      await tx.signedQuote.update({ where: { quoteHash }, data: { status: 'COMMITTED' } });
+    await prisma.$transaction(async (tx) => {
+      await tx.signedQuote.update({
+        where: { quoteHash },
+        data: { status: 'COMMITTED' },
+      });
+
       await tx.traderNonce.upsert({
-        where: { trader_marketId: { trader: signed.trader, marketId: signed.marketId } },
-        create: { trader: signed.trader, marketId: signed.marketId, lastNonce: signed.nonce },
+        where: {
+          trader_marketId: {
+            trader: signed.trader,
+            marketId: signed.marketId,
+          },
+        },
+        create: {
+          trader: signed.trader,
+          marketId: signed.marketId,
+          lastNonce: signed.nonce,
+        },
         update: { lastNonce: signed.nonce },
       });
     });
+    ;
+
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ ok: false, error: err.message }), { status: 500 });
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : 'Internal server error';
+
+    return new Response(
+      JSON.stringify({ ok: false, error: message }),
+      { status: 500 }
+    );
   }
+
 }

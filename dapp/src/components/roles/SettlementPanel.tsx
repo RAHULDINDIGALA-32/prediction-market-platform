@@ -44,7 +44,7 @@ export default function SettlementPanel() {
 
   const {
     isLoading: isConfirming,
-    isSuccess: isConfirmed,
+   // isSuccess: isConfirmed,
   } = useWaitForTransactionReceipt({
     hash,
   });
@@ -61,8 +61,9 @@ export default function SettlementPanel() {
         args: [market as `0x${string}`],
       });
       setStatus(`Settle transaction submitted: ${txHash}`);
-    } catch (err: any) {
-      setError(err?.message ?? String(err));
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage);
     }
   }
 
@@ -79,8 +80,9 @@ export default function SettlementPanel() {
         args: [market as `0x${string}`, amountWei],
       });
       setStatus(`Redeem transaction submitted: ${txHash}`);
-    } catch (err: any) {
-      setError(err?.message ?? String(err));
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage);
     }
   }
 

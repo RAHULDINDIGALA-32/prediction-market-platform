@@ -24,6 +24,18 @@ interface MarketCreationInput {
   subsidyAmount: string; // Creator's subsidy (in ETH) = lmsrB * ln(2) ≈ lmsrB * 0.693
 }
 
+interface Market {
+  id: string;
+  address?: string;
+  ipfsCid?: string;
+}
+
+interface PreparedMarketData {
+  metadataHash: string;
+  ipfsCid: string;
+  metadata: Record<string, unknown>;
+}
+
 export default function CreateMarketClient() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -39,8 +51,8 @@ export default function CreateMarketClient() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [createdMarket, setCreatedMarket] = useState<any>(null);
-  const [preparedData, setPreparedData] = useState<any>(null);
+  const [createdMarket, setCreatedMarket] = useState<Market | null>(null);
+  const [preparedData, setPreparedData] = useState<PreparedMarketData | null>(null);
 
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const { writeContractAsync, isPending: isWriting } = useWriteContract();
@@ -289,9 +301,10 @@ export default function CreateMarketClient() {
 
       setTxHash(hash);
       // Step 3: Wait for transaction confirmation
-    } catch (error: any) {
+    } catch (error) {
       console.error("Market creation error:", error);
-      setErrors({ submit: error.message || "Failed to create market" });
+      const errorMessage = error instanceof Error ? error.message : "Failed to create market";
+      setErrors({ submit: errorMessage });
       setIsSubmitting(false);
     }
   };
@@ -342,9 +355,10 @@ export default function CreateMarketClient() {
         });
         setPreparedData(null);
         setTxHash(undefined);
-      } catch (error: any) {
+      } catch (error) {
         console.error("Market registration error:", error);
-        setErrors({ submit: error.message || "Market created but registration failed" });
+        const errorMessage = error instanceof Error ? error.message : "Market created but registration failed";
+        setErrors({ submit: errorMessage });
         setIsSubmitting(false);
       }
     };
@@ -352,7 +366,7 @@ export default function CreateMarketClient() {
     if (isConfirmed && txHash && preparedData) {
       registerMarket();
     }
-  }, [isConfirmed, txHash, preparedData, address, chainId]);
+  }, [isConfirmed, txHash, preparedData, address, chainId, formData.lmsrB, formData.subsidyAmount]);
 
   if (!isConnected) {
     return (
@@ -442,7 +456,7 @@ export default function CreateMarketClient() {
                 <div>
                   <span className="font-medium">Market Address:</span>{" "}
                   <code className="bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded">
-                    {formatAddress(createdMarket.address)}
+                    {formatAddress(createdMarket.address as `0x${string}`)}
                   </code>
                 </div>
                 <div>
@@ -801,4 +815,3 @@ export default function CreateMarketClient() {
     </div>
   );
 }
-

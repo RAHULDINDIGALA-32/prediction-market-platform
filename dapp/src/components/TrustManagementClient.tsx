@@ -19,6 +19,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { motion } from 'framer-motion';
 import { MARKET_FACTORY_ABI, QUOTE_VERIFIER_ABI, ORACLE_ADAPTER_ABI } from '@/lib/adminABIs';
 
+interface Creator {
+  id: string;
+  address: string;
+  createdAt: string;
+}
+
+interface Signer {
+  id: string;
+  address: string;
+  createdAt: string;
+}
+
+interface Resolver {
+  id: string;
+  address: string;
+  createdAt: string;
+}
+
 export default function TrustManagementClient() {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient();
@@ -48,16 +66,16 @@ export default function TrustManagementClient() {
    */
   const executeContractTransaction = async (
     contractAddress: `0x${string}`,
-    abi: any,
+    abi: unknown[],
     methodName: string,
-    args: any[]
+    args: unknown[]
   ): Promise<string> => {
     if (!walletClient || !publicClient) {
       throw new Error('Wallet or public client not available');
     }
 
     // Create contract interface to encode function data
-    const contract = new ethers.Contract(contractAddress, abi);
+    const contract = new ethers.Contract(contractAddress, abi as ethers.InterfaceAbi);
     const functionFragment = contract.interface.getFunction(methodName);
     if (!functionFragment) {
       throw new Error(`Method ${methodName} not found on contract`);
@@ -125,7 +143,7 @@ export default function TrustManagementClient() {
       queryClient.invalidateQueries({ queryKey: ['creators'] });
       setCreatorAddress('');
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setTransactionError(error.message || 'Transaction failed');
     },
   });
@@ -159,7 +177,7 @@ export default function TrustManagementClient() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['creators'] });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setTransactionError(error.message || 'Transaction failed');
     },
   });
@@ -206,7 +224,7 @@ export default function TrustManagementClient() {
       queryClient.invalidateQueries({ queryKey: ['resolvers'] });
       setResolverAddress('');
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setTransactionError(error.message || 'Transaction failed');
     },
   });
@@ -240,7 +258,7 @@ export default function TrustManagementClient() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['resolvers'] });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setTransactionError(error.message || 'Transaction failed');
     },
   });
@@ -292,7 +310,7 @@ export default function TrustManagementClient() {
       setSignerAddress('');
       setSignerPrivateKey('');
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setTransactionError(error.message || 'Transaction failed');
     },
   });
@@ -326,7 +344,7 @@ export default function TrustManagementClient() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['signers'] });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setTransactionError(error.message || 'Transaction failed');
     },
   });
@@ -466,7 +484,7 @@ export default function TrustManagementClient() {
                 </div>
               ) : creators && creators.length > 0 ? (
                 <div className="space-y-3">
-                  {creators.map((creator: any) => (
+                  {creators.map((creator: Creator) => (
                     <motion.div
                       key={creator.id}
                       initial={{ opacity: 0, y: 10 }}
@@ -582,7 +600,7 @@ export default function TrustManagementClient() {
               </Button>
               {(addSignerMutation.isError || transactionError) && (
                 <p className="text-sm text-red-500">
-                  {transactionError || (addSignerMutation.error as any)?.message}
+                  {transactionError || (addSignerMutation.error as Error)?.message}
                 </p>
               )}
             </CardContent>
@@ -600,7 +618,7 @@ export default function TrustManagementClient() {
                 </div>
               ) : signers && signers.length > 0 ? (
                 <div className="space-y-3">
-                  {signers.map((signer: any) => (
+                  {signers.map((signer: Signer) => (
                     <motion.div
                       key={signer.id}
                       initial={{ opacity: 0, y: 10 }}
@@ -695,7 +713,7 @@ export default function TrustManagementClient() {
                 </div>
               ) : resolvers && resolvers.length > 0 ? (
                 <div className="space-y-3">
-                  {resolvers.map((resolver: any) => (
+                  {resolvers.map((resolver: Resolver) => (
                     <motion.div
                       key={resolver.id}
                       initial={{ opacity: 0, y: 10 }}

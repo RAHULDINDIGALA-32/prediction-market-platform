@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatEth, formatAddress, calculateProbability } from "@/lib/utils";
+import { formatEth, calculateProbability } from "@/lib/utils";
 import { useReadContracts } from "wagmi";
 import { 
   Loader2, 
@@ -15,7 +15,6 @@ import {
   Award,
   Target,
   Calendar,
-  Eye,
   Zap,
   DollarSign,
   Users,
@@ -24,6 +23,56 @@ import {
   Clock
 } from "lucide-react";
 import Link from "next/link";
+
+// Type definitions for portfolio data
+interface TraderPosition {
+  id: string;
+  contractAddress?: string;
+  title?: string;
+  category: string;
+  status: string;
+  amount: bigint;
+  cost: bigint;
+  collateral: bigint;
+  subsidyAmount?: bigint;
+  endTime?: bigint;
+  qYes: number;
+  qNo: number;
+}
+
+interface CreatorMarket {
+  id: string;
+  title?: string;
+  category: string;
+  status: string;
+  collateral: bigint;
+  subsidyAmount?: bigint;
+  createdAt: string;
+  endTime?: bigint;
+  qYes: number;
+  qNo: number;
+}
+
+interface TraderStats {
+  totalPnL: number;
+  totalPnLPercent: number;
+  winRate: number;
+  totalVolume: number;
+  roi: number;
+  avgTradeSize: number;
+  winCount?: number;
+  lossCount?: number;
+  tradeCount?: number;
+}
+
+interface CreatorStats {
+  marketCount?: number;
+  totalMarketsVolume: number;
+  totalFees: number;
+  avgMarketVolume: number;
+  creatorRank?: number;
+  creatorPercentile?: number;
+}
 
 const ERC20_ABI = [
   {
@@ -53,25 +102,45 @@ const MARKET_ABI = [
   },
 ] as const;
 
-async function getUserPortfolio(address: string) {
+async function getUserPortfolio(address: string): Promise<{ trader: TraderPosition[]; creator: CreatorMarket[] }> {
   const res = await fetch(`/api/portfolio?address=${address}`);
   if (!res.ok) return { trader: [], creator: [] };
   const data = await res.json();
-  
-  // Parse string values back to numbers for calculations
-  const parseMarkets = (markets: any[]) =>
-    markets.map((m: any) => ({
-      ...m,
-      amount: typeof m.amount === "string" ? BigInt(m.amount) : m.amount,
-      cost: typeof m.cost === "string" ? BigInt(m.cost) : m.cost,
-      collateral: typeof m.collateral === "string" ? BigInt(m.collateral) : m.collateral,
-      subsidyAmount: typeof m.subsidyAmount === "string" ? BigInt(m.subsidyAmount) : m.subsidyAmount,
-      endTime: typeof m.endTime === "string" ? BigInt(m.endTime) : m.endTime,
+
+  // Parse string values back to proper types for calculations
+  const parseTraderMarkets = (markets: Array<Record<string, unknown>>): TraderPosition[] =>
+    markets.map((m: Record<string, unknown>) => ({
+      id: String(m.id || ''),
+      contractAddress: m.contractAddress ? String(m.contractAddress) : undefined,
+      title: m.title ? String(m.title) : undefined,
+      category: String(m.category || ''),
+      status: String(m.status || ''),
+      amount: typeof m.amount === "string" ? BigInt(m.amount) : BigInt(m.amount as number || 0),
+      cost: typeof m.cost === "string" ? BigInt(m.cost) : BigInt(m.cost as number || 0),
+      collateral: typeof m.collateral === "string" ? BigInt(m.collateral) : BigInt(m.collateral as number || 0),
+      subsidyAmount: m.subsidyAmount ? (typeof m.subsidyAmount === "string" ? BigInt(m.subsidyAmount) : BigInt(m.subsidyAmount as number)) : undefined,
+      endTime: m.endTime ? (typeof m.endTime === "string" ? BigInt(m.endTime) : BigInt(m.endTime as number)) : undefined,
+      qYes: Number(m.qYes || 0),
+      qNo: Number(m.qNo || 0),
     }));
-  
+
+  const parseCreatorMarkets = (markets: Array<Record<string, unknown>>): CreatorMarket[] =>
+    markets.map((m: Record<string, unknown>) => ({
+      id: String(m.id || ''),
+      title: m.title ? String(m.title) : undefined,
+      category: String(m.category || ''),
+      status: String(m.status || ''),
+      collateral: typeof m.collateral === "string" ? BigInt(m.collateral) : BigInt(m.collateral as number || 0),
+      subsidyAmount: m.subsidyAmount ? (typeof m.subsidyAmount === "string" ? BigInt(m.subsidyAmount) : BigInt(m.subsidyAmount as number)) : undefined,
+      createdAt: String(m.createdAt || ''),
+      endTime: m.endTime ? (typeof m.endTime === "string" ? BigInt(m.endTime) : BigInt(m.endTime as number)) : undefined,
+      qYes: Number(m.qYes || 0),
+      qNo: Number(m.qNo || 0),
+    }));
+
   return {
-    trader: data.trader ? parseMarkets(data.trader) : [],
-    creator: data.creator ? parseMarkets(data.creator) : [],
+    trader: data.trader ? parseTraderMarkets(data.trader) : [],
+    creator: data.creator ? parseCreatorMarkets(data.creator) : [],
   };
 }
 
@@ -103,13 +172,13 @@ async function getUserStats(address: string) {
 /**
  * TRADER PORTFOLIO SECTION
  */
-function TraderPortfolioSection({ 
-  positions, 
-  stats, 
-  userAddress 
-}: { 
-  positions: any[]; 
-  stats: any; 
+function TraderPortfolioSection({
+  positions,
+  stats,
+  userAddress
+}: {
+  positions: TraderPosition[];
+  stats: TraderStats | null;
   userAddress: string;
 }) {
   if (!positions || positions.length === 0) return null;
@@ -165,7 +234,7 @@ function TraderPortfolioSection({
       <div>
         <h3 className="text-lg font-semibold mb-3">Active Positions</h3>
         <div className="space-y-3">
-          {positions.map((market: any) => (
+          {positions.map((market: TraderPosition) => (
             <TraderPositionCard key={market.id} market={market} userAddress={userAddress} />
           ))}
         </div>
@@ -177,14 +246,12 @@ function TraderPortfolioSection({
 /**
  * CREATOR PORTFOLIO SECTION
  */
-function CreatorPortfolioSection({ 
-  markets, 
-  stats, 
-  userAddress 
-}: { 
-  markets: any[]; 
-  stats: any; 
-  userAddress: string;
+function CreatorPortfolioSection({
+  markets,
+  stats
+}: {
+  markets: CreatorMarket[];
+  stats: CreatorStats | null;
 }) {
   if (!markets || markets.length === 0) return null;
 
@@ -238,7 +305,7 @@ function CreatorPortfolioSection({
       <div>
         <h3 className="text-lg font-semibold mb-3">Markets You Created</h3>
         <div className="space-y-3">
-          {markets.map((market: any) => (
+          {markets.map((market: CreatorMarket) => (
             <CreatorMarketCard key={market.id} market={market} />
           ))}
         </div>
@@ -286,7 +353,7 @@ function MetricCard({
  * Trader Position Card - Individual position display
  * Shows: Market title, position (YES/NO), amount, entry price, current price, P&L
  */
-function TraderPositionCard({ market, userAddress }: { market: any; userAddress: string }) {
+function TraderPositionCard({ market, userAddress }: { market: TraderPosition; userAddress: string }) {
   const marketAddress = market.contractAddress as `0x${string}` | undefined;
 
   const { data: marketInfo } = useReadContracts({
@@ -330,7 +397,7 @@ function TraderPositionCard({ market, userAddress }: { market: any; userAddress:
 
   if (!hasYesPosition && !hasNoPosition) return null;
 
-  const probabilities = calculateProbability(market.qYes, market.qNo);
+  const probabilities = calculateProbability(BigInt(market.qYes), BigInt(market.qNo));
   const positionBalance = hasYesPosition ? yesBalance : noBalance;
   const positionSide = hasYesPosition ? "YES" : "NO";
   const entryPrice = hasYesPosition ? probabilities.yes : probabilities.no;
@@ -393,8 +460,8 @@ function TraderPositionCard({ market, userAddress }: { market: any; userAddress:
  * Creator Market Card - Shows market created by user
  * Shows: Market title, status, volume, participants, fees
  */
-function CreatorMarketCard({ market }: { market: any }) {
-  const probabilities = calculateProbability(market.qYes, market.qNo);
+function CreatorMarketCard({ market }: { market: CreatorMarket }) {
+  const probabilities = calculateProbability(BigInt(market.qYes), BigInt(market.qNo));
   const totalVolume = Number(market.collateral) || 0;
   const creatorFees = totalVolume * 0.02; // 2% fee
 
@@ -555,10 +622,9 @@ export default function PortfolioClient() {
 
       {/* Show Creator Section if applicable */}
       {hasCreatorMarkets && (
-        <CreatorPortfolioSection 
+        <CreatorPortfolioSection
           markets={portfolioData.creator}
           stats={stats?.creator}
-          userAddress={address!}
         />
       )}
 

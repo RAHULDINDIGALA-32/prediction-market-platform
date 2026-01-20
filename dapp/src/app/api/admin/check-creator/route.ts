@@ -12,9 +12,10 @@ export async function GET(req: NextRequest) {
     const authorized = await isAuthorizedCreator(address);
     const admin = await isAdmin(address);
     return NextResponse.json({ authorized, isAdmin: admin });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: "Failed to check authorization", details: error.message },
+      { error: "Failed to check authorization", details: errorMessage },
       { status: 500 }
     );
   }

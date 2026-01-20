@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi";
 import {
@@ -21,9 +21,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Clock,
-  TrendingUp,
   Loader,
-  X,
   ExternalLink,
   ArrowUpRight,
 } from "lucide-react";
@@ -33,7 +31,7 @@ import {
   formatTimeRemaining,
   formatAddress,
 } from "@/lib/utils";
-import { getSettlementConfig, weiToEth, formatSeconds, isRedemptionClosed, getRedemptionTimeRemaining } from "@/lib/settlementConfig";
+import { getSettlementConfig, getRedemptionTimeRemaining } from "@/lib/settlementConfig";
 import { syncSettlementToDatabase } from "@/lib/blockchainUtils";
 import { SettlementMarket } from "@/hooks/useSettlementMarkets";
 
@@ -160,7 +158,7 @@ export default function SettlementMarketDetailModal({
     },
   });
 
-  const marketState = marketInfo?.[0];
+  //const marketState = marketInfo?.[0];
   const yesTokenAddress = (marketInfo?.[2] as `0x${string}` | undefined) || undefined;
   const noTokenAddress = (marketInfo?.[3] as `0x${string}` | undefined) || undefined;
   const vaultAddress = (marketInfo?.[4] as `0x${string}` | undefined) || undefined;

@@ -10,7 +10,7 @@ export default function OraclePage() {
         </h1>
         <p className="max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
           Participate in the oracle resolution process. Propose outcomes for closed markets,
-          dispute proposed outcomes within the dispute window, or resolve disputes if you're an
+          dispute proposed outcomes within the dispute window, or resolve disputes if you&apos;re an
           authorized resolver. Anyone can finalize undisputed outcomes after the dispute window closes.
         </p>
       </section>

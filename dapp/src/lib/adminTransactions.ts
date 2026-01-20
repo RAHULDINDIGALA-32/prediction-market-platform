@@ -22,7 +22,7 @@ export interface AdminTransactionParams {
 export async function executeAdminTransaction(
   params: AdminTransactionParams
 ): Promise<string> {
-  const { contractAddress, contractType, methodName, methodParams, provider, signer } = params;
+  const { contractAddress, contractType, methodName, methodParams, signer } = params;
 
   // Select ABI based on contract type
   let abi: string[];
@@ -44,13 +44,15 @@ export async function executeAdminTransaction(
   const contract = new ethers.Contract(contractAddress, abi, signer);
 
   // Call method
-  const method = (contract as any)[methodName];
+  const method = (contract as Record<string, unknown>)[methodName];
   if (!method) {
     throw new Error(`Method ${methodName} not found on contract`);
   }
 
   // Execute transaction
-  const tx = await method(...methodParams);
+  const tx = await (method as (...args: (string | boolean)[]) => Promise<ethers.TransactionResponse>)(
+  ...methodParams
+);
 
   // Return transaction hash immediately
   return tx.hash;

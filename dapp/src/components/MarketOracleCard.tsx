@@ -3,7 +3,6 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
   calculateProbability,
@@ -13,7 +12,7 @@ import {
 import {
   Clock,
   TrendingUp,
-  AlertCircle,
+  Badge,
   CheckCircle,
   AlertTriangle,
 } from "lucide-react";
@@ -87,7 +86,6 @@ export default function MarketOracleCard({ market, onSelect }: Props) {
             </div>
             <Badge
               className={`ml-2 flex items-center gap-1 whitespace-nowrap border ${config.color}`}
-              variant="outline"
             >
               {config.icon}
               {config.label}

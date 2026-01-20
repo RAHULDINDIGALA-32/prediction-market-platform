@@ -11,7 +11,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,11 +19,9 @@ import {
   AlertCircle,
   CheckCircle,
   AlertTriangle,
-  Clock,
-  TrendingUp,
   Loader,
-  X,
   ExternalLink,
+  X
 } from "lucide-react";
 import {
   calculateProbability,
@@ -107,7 +104,7 @@ export default function OracleMarketDetailModal({
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txStatus, setTxStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
   const [txError, setTxError] = useState<string | null>(null);
-  const [isResolving, setIsResolving] = useState(false);
+  //const [isResolving, setIsResolving] = useState(false);
   const [resolveDecision, setResolveDecision] = useState<"correct" | "incorrect">("correct");
 
   const { isLoading: isConfirming } = useWaitForTransactionReceipt({
@@ -123,12 +120,12 @@ export default function OracleMarketDetailModal({
     : "Unknown";
 
   // Determine if user is the proposer
-  const isProposer =
-    market.latestOracleEvent?.proposer?.toLowerCase() ===
-    userAddress?.toLowerCase();
-  const isDisputer =
-    market.latestOracleEvent?.disputer?.toLowerCase() ===
-    userAddress?.toLowerCase();
+  // const isProposer =
+  //   market.latestOracleEvent?.proposer?.toLowerCase() ===
+  //   userAddress?.toLowerCase();
+  // const isDisputer =
+  //   market.latestOracleEvent?.disputer?.toLowerCase() ===
+  //   userAddress?.toLowerCase();
 
   // Reset form when market changes
   useEffect(() => {
@@ -181,59 +178,61 @@ export default function OracleMarketDetailModal({
           "Proposal confirmed but database sync failed. Please refresh the page."
         );
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setTxStatus("error");
-      setTxError(err?.message || "Failed to propose outcome");
+      const errorMessage = err instanceof Error ? err.message : "Failed to propose outcome";
+      setTxError(errorMessage);
       console.error("Propose error:", err);
     }
   };
 
-  const handleDisputeOutcome = async () => {
-    try {
-      setTxError(null);
-      setTxStatus("pending");
+  // const handleDisputeOutcome = async () => {
+  //   try {
+  //     setTxError(null);
+  //     setTxStatus("pending");
 
-      const value = parseEthToWei(bondAmount);
-      if (value === 0n) {
-        throw new Error("Invalid bond amount");
-      }
+  //     const value = parseEthToWei(bondAmount);
+  //     if (value === 0n) {
+  //       throw new Error("Invalid bond amount");
+  //     }
 
-      const hash = await writeContractAsync({
-        address: ORACLE_ADDRESS,
-        abi: ORACLE_ABI,
-        functionName: "disputeOutcome",
-        args: [market.contractAddress as `0x${string}`],
-        value,
-      });
+  //     const hash = await writeContractAsync({
+  //       address: ORACLE_ADDRESS,
+  //       abi: ORACLE_ABI,
+  //       functionName: "disputeOutcome",
+  //       args: [market.contractAddress as `0x${string}`],
+  //       value,
+  //     });
 
-      setTxHash(hash);
-      setTxStatus("success");
+  //     setTxHash(hash);
+  //     setTxStatus("success");
 
-      // ISSUE #2 RESOLUTION: Sync oracle dispute to database
-      console.log(`[ORACLE MODAL] Syncing dispute for market ${market.id}`);
-      const syncSuccess = await syncOracleToDatabase(
-        "dispute",
-        market.id,
-        hash as `0x${string}`,
-        {
-          disputer: userAddress,
-        }
-      );
+  //     // ISSUE #2 RESOLUTION: Sync oracle dispute to database
+  //     console.log(`[ORACLE MODAL] Syncing dispute for market ${market.id}`);
+  //     const syncSuccess = await syncOracleToDatabase(
+  //       "dispute",
+  //       market.id,
+  //       hash as `0x${string}`,
+  //       {
+  //         disputer: userAddress,
+  //       }
+  //     );
 
-      if (!syncSuccess) {
-        console.error(
-          "[ORACLE MODAL] Dispute syncing failed - database may be out of sync"
-        );
-        setTxError(
-          "Dispute confirmed but database sync failed. Please refresh the page."
-        );
-      }
-    } catch (err: any) {
-      setTxStatus("error");
-      setTxError(err?.message || "Failed to dispute outcome");
-      console.error("Dispute error:", err);
-    }
-  };
+  //     if (!syncSuccess) {
+  //       console.error(
+  //         "[ORACLE MODAL] Dispute syncing failed - database may be out of sync"
+  //       );
+  //       setTxError(
+  //         "Dispute confirmed but database sync failed. Please refresh the page."
+  //       );
+  //     }
+  //   } catch (err: unknown) {
+  //     setTxStatus("error");
+  //     const errorMessage = err instanceof Error ? err.message : "Failed to dispute outcome";
+  //     setTxError(errorMessage);
+  //     console.error("Dispute error:", err);
+  //   }
+  // };
 
   const handleResolveOutcome = async () => {
     try {
@@ -273,55 +272,57 @@ export default function OracleMarketDetailModal({
           "Resolution confirmed but database sync failed. Please refresh the page."
         );
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setTxStatus("error");
-      setTxError(err?.message || "Failed to resolve outcome");
+      const errorMessage = err instanceof Error ? err.message : "Failed to resolve outcome";
+      setTxError(errorMessage);
       console.error("Resolve error:", err);
     }
   };
 
-  const handleFinalizeOutcome = async () => {
-    try {
-      setTxError(null);
-      setTxStatus("pending");
+  // const handleFinalizeOutcome = async () => {
+  //   try {
+  //     setTxError(null);
+  //     setTxStatus("pending");
 
-      const hash = await writeContractAsync({
-        address: ORACLE_ADDRESS,
-        abi: ORACLE_ABI,
-        functionName: "finalizeUndisputedOutcome",
-        args: [market.contractAddress as `0x${string}`],
-      });
+  //     const hash = await writeContractAsync({
+  //       address: ORACLE_ADDRESS,
+  //       abi: ORACLE_ABI,
+  //       functionName: "finalizeUndisputedOutcome",
+  //       args: [market.contractAddress as `0x${string}`],
+  //     });
 
-      setTxHash(hash);
-      setTxStatus("success");
+  //     setTxHash(hash);
+  //     setTxStatus("success");
 
-      // ISSUE #4 RESOLUTION: Sync oracle finalization to database
-      console.log(
-        `[ORACLE MODAL] Syncing finalization for market ${market.id}`
-      );
-      const syncSuccess = await syncOracleToDatabase(
-        "finalize",
-        market.id,
-        hash as `0x${string}`,
-        {
-          finalOutcome: market.oracleEvent?.proposed || "YES",
-        }
-      );
+    
+  //     console.log(
+  //       `[ORACLE MODAL] Syncing finalization for market ${market.id}`
+  //     );
+  //     const syncSuccess = await syncOracleToDatabase(
+  //       "finalize",
+  //       market.id,
+  //       hash as `0x${string}`,
+  //       {
+  //         finalOutcome: market.latestOracleEvent?.proposed || "YES",
+  //       }
+  //     );
 
-      if (!syncSuccess) {
-        console.error(
-          "[ORACLE MODAL] Finalization syncing failed - database may be out of sync"
-        );
-        setTxError(
-          "Finalization confirmed but database sync failed. Please refresh the page."
-        );
-      }
-    } catch (err: any) {
-      setTxStatus("error");
-      setTxError(err?.message || "Failed to finalize outcome");
-      console.error("Finalize error:", err);
-    }
-  };
+  //     if (!syncSuccess) {
+  //       console.error(
+  //         "[ORACLE MODAL] Finalization syncing failed - database may be out of sync"
+  //       );
+  //       setTxError(
+  //         "Finalization confirmed but database sync failed. Please refresh the page."
+  //       );
+  //     }
+  //   } catch (err: unknown) {
+  //     setTxStatus("error");
+  //     const errorMessage = err instanceof Error ? err.message : "Failed to finalize outcome";
+  //     setTxError(errorMessage);
+  //     console.error("Finalize error:", err);
+  //   }
+  // };
 
   const renderOracleActions = () => {
     switch (market.oracleStatus) {
@@ -468,7 +469,7 @@ export default function OracleMarketDetailModal({
                   Outcome Resolved
                 </h4>
                 <p className="text-xs text-emerald-800 dark:text-emerald-300 mt-1">
-                  This market's outcome has been finalized. The outcome is:{" "}
+                  This market&apos;s outcome has been finalized. The outcome is:{" "}
                   <span className="font-semibold">
                     {market.latestOracleEvent?.finalized || "Pending"}
                   </span>

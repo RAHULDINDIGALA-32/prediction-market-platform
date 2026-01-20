@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import MarketCard from "@/components/MarketCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -12,9 +12,9 @@ type MarketStatus = "OPEN" | "CLOSED" | "RESOLVED" | "SETTLED";
 interface Market {
   id: string;
   status: MarketStatus;
-  qYes: any;
-  qNo: any;
-  collateral: any;
+  qYes: string | bigint;
+  qNo: string | bigint;
+  collateral: string | bigint;
   contractAddress?: string | null;
   createdAt: Date;
   title?: string | null;
@@ -34,7 +34,7 @@ export default function MarketsListClient({ initialMarkets }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<MarketStatus | "all">("all");
   const [sortBy, setSortBy] = useState<CategoryOption>("all");
-  const [isLoading, setIsLoading] = useState(false);
+  const [_isLoading] = useState(false);
 
   const filteredAndSorted = useMemo(() => {
     let filtered = [...initialMarkets];
@@ -129,7 +129,7 @@ export default function MarketsListClient({ initialMarkets }: Props) {
       </div>
 
       {/* Markets Grid */}
-      {isLoading ? (
+      {_isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
         </div>
@@ -154,5 +154,3 @@ export default function MarketsListClient({ initialMarkets }: Props) {
     </div>
   );
 }
-
-

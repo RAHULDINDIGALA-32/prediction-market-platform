@@ -9,6 +9,10 @@ import { ethers } from "ethers";
 import { prisma } from "./db";
 import { authorizationCache } from "./authorizationCache";
 
+interface ContractEvent {
+  args?: readonly unknown[];
+}
+
 interface SyncServiceConfig {
   enabled: boolean;
   interval: number; // ms
@@ -43,10 +47,10 @@ export class AuthorizationSyncService {
   private provider: ethers.JsonRpcProvider;
 
   // Contract addresses and ABIs
-  private readonly MARKET_FACTORY_ADDRESS = process.env.MARKET_FACTORY_ADDRESS;
-  private readonly QUOTE_VERIFIER_ADDRESS = process.env.QUOTE_VERIFIER_ADDRESS;
-  private readonly ORACLE_ADAPTER_ADDRESS = process.env.ORACLE_ADAPTER_ADDRESS;
-  private readonly RPC_URL = process.env.SEPOLIA_RPC_URL || process.env.RPC_URL;
+  private readonly MARKET_FACTORY_ADDRESS = process.env.NEXT_PUBLIC_MARKET_FACTORY_ADDRESS;
+  private readonly QUOTE_VERIFIER_ADDRESS = process.env.NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS;
+  private readonly ORACLE_ADAPTER_ADDRESS = process.env.NEXT_PUBLIC_ORACLE_ADAPTER_ADDRESS;
+  private readonly RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL;
 
   private readonly MARKET_FACTORY_ABI = [
     "event CreatorWhitelisted(address indexed creator, bool isWhitelisted)",
@@ -158,14 +162,14 @@ export class AuthorizationSyncService {
         this.provider
       );
 
-      const lastSync = await prisma.syncLog
-        .findUnique({
-          where: { service: "marketFactory" },
-        })
-        .then((log: any) => log?.lastBlockScanned ?? 0);
+      const syncLog = await prisma.syncLog.findUnique({
+        where: { service: "marketFactory" },
+      });
+
+      const lastSync = syncLog?.lastBlockScanned ?? 0;
 
       const currentBlock = await this.provider.getBlockNumber();
-      const fromBlock = Math.max(lastSync + 1, currentBlock - this.config.maxBlockRange);
+      const fromBlock = Math.max(Number(lastSync) + 1, currentBlock - this.config.maxBlockRange);
 
       if (fromBlock > currentBlock) {
         return;
@@ -178,12 +182,13 @@ export class AuthorizationSyncService {
       );
 
       for (const event of events) {
-        const creator = (event as any).args?.[0];
-        const isWhitelisted = (event as any).args?.[1];
-        
-        if (!creator || isWhitelisted === undefined) continue;
-        
+        const creator = (event as ContractEvent).args?.[0];
+        const isWhitelistedRaw = (event as ContractEvent).args?.[1];
+
+        if (!creator || typeof isWhitelistedRaw !== 'boolean') continue;
+
         const creatorAddr = creator.toString().toLowerCase();
+        const isWhitelisted = Boolean(isWhitelistedRaw);
 
         await prisma.whitelistedCreator.upsert({
           where: { address: creatorAddr },
@@ -231,14 +236,14 @@ export class AuthorizationSyncService {
         this.provider
       );
 
-      const lastSync = await prisma.syncLog
-        .findUnique({
-          where: { service: "quoteVerifier" },
-        })
-        .then((log: any) => log?.lastBlockScanned ?? 0);
+      const syncLog = await prisma.syncLog.findUnique({
+        where: { service: "marketFactory" },
+      });
+
+      const lastSync = syncLog?.lastBlockScanned ?? 0
 
       const currentBlock = await this.provider.getBlockNumber();
-      const fromBlock = Math.max(lastSync + 1, currentBlock - this.config.maxBlockRange);
+      const fromBlock = Math.max(Number(lastSync) + 1, currentBlock - this.config.maxBlockRange);
 
       if (fromBlock > currentBlock) {
         return;
@@ -252,15 +257,15 @@ export class AuthorizationSyncService {
       );
 
       for (const event of addedEvents) {
-        const signer = (event as any).args?.[0];
+        const signer = (event as ContractEvent).args?.[0];
         if (!signer) continue;
-        
+
         const signerAddr = signer.toString().toLowerCase();
 
         await prisma.authorizedSigner.upsert({
           where: { address: signerAddr },
           update: { isAllowed: true, updatedAt: new Date() },
-          create: { address: signerAddr, isAllowed: true },
+          create: { address: signerAddr, isAllowed: true, },
         });
 
         authorizationCache.setSigner(signerAddr, true, this.config.cacheTTL);
@@ -275,9 +280,9 @@ export class AuthorizationSyncService {
       );
 
       for (const event of removedEvents) {
-        const signer = (event as any).args?.[0];
+        const signer = (event as ContractEvent).args?.[0];
         if (!signer) continue;
-        
+
         const signerAddr = signer.toString().toLowerCase();
 
         await prisma.authorizedSigner.update({
@@ -324,14 +329,13 @@ export class AuthorizationSyncService {
         this.provider
       );
 
-      const lastSync = await prisma.syncLog
-        .findUnique({
-          where: { service: "oracleAdapter" },
-        })
-        .then((log: any) => log?.lastBlockScanned ?? 0);
+      const syncLog = await prisma.syncLog.findUnique({
+        where: { service: "marketFactory" },
+      });
 
+      const lastSync = syncLog?.lastBlockScanned ?? 0
       const currentBlock = await this.provider.getBlockNumber();
-      const fromBlock = Math.max(lastSync + 1, currentBlock - this.config.maxBlockRange);
+      const fromBlock = Math.max(Number(lastSync) + 1, currentBlock - this.config.maxBlockRange);
 
       if (fromBlock > currentBlock) {
         return;
@@ -345,9 +349,9 @@ export class AuthorizationSyncService {
       );
 
       for (const event of addedEvents) {
-        const resolver = (event as any).args?.[0];
+        const resolver = (event as ContractEvent).args?.[0];
         if (!resolver) continue;
-        
+
         const resolverAddr = resolver.toString().toLowerCase();
 
         await prisma.oracleResolver.upsert({
@@ -368,9 +372,9 @@ export class AuthorizationSyncService {
       );
 
       for (const event of removedEvents) {
-        const resolver = (event as any).args?.[0];
+        const resolver = (event as ContractEvent).args?.[0];
         if (!resolver) continue;
-        
+
         const resolverAddr = resolver.toString().toLowerCase();
 
         await prisma.oracleResolver.update({

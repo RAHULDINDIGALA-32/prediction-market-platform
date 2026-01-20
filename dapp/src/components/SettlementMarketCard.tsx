@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { formatAddress, formatEth, calculateProbability, formatTimeRemaining } from "@/lib/utils";
+import { formatAddress, calculateProbability, formatTimeRemaining } from "@/lib/utils";
 import { SettlementMarket } from "@/hooks/useSettlementMarkets";
 import { CheckCircle2, Clock, TrendingUp } from "lucide-react";
 

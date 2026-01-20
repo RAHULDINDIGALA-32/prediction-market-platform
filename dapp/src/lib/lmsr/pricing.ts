@@ -50,11 +50,11 @@ export async function lmsrQuote(input: {
   const amountBig = toBigInt(input.amount);
 
   // Simulate the trade (no DB write) to compute cost
-  const { newState, cost } = applyTrade(state, input.side, amountBig);
+  const { cost } = applyTrade(state, input.side, amountBig);
 
   const deadline = Math.floor(Date.now() / 1000) + 60; // 1 minute validity
   // Reserve a server-side nonce for this trader+market atomically
-  const result = await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
     const existing = await tx.traderNonce.findUnique({
       where: {
         trader_marketId: {

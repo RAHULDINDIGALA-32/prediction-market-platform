@@ -1,6 +1,6 @@
 import Decimal from "decimal.js";
 
-const SCALE = new Decimal("1e18");
+//const SCALE = new Decimal("1e18");
 
 // Configure Decimal precision and rounding appropriate for financial calculations.
 Decimal.set({ precision: 80, rounding: Decimal.ROUND_HALF_UP });

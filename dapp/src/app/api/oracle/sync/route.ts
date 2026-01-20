@@ -103,15 +103,19 @@ export async function POST(request: NextRequest) {
       marketId,
       ...result,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorName = error instanceof Error ? error.name : "Unknown";
+    const errorStack = error instanceof Error ? error.stack : "";
+    
     console.error(
-      `[ORACLE SYNC ERROR] Error type: ${error.name}, Message: ${error.message}, Stack: ${error.stack}`
+      `[ORACLE SYNC ERROR] Error type: ${errorName}, Message: ${errorMessage}, Stack: ${errorStack}`
     );
 
     return NextResponse.json(
       {
         success: false,
-        error: error?.message || "Sync operation failed",
+        error: errorMessage || "Sync operation failed",
         action: "sync",
       },
       { status: 500 }
@@ -126,9 +130,9 @@ async function handlePropose(
   marketId: string,
   transactionHash: string,
   blockNumber: number,
-  data: any
+  data: unknown
 ) {
-  const { proposer, proposedOutcome } = data;
+  const { proposer, proposedOutcome } = data as Record<string, unknown>;
 
   if (!proposer || !proposedOutcome) {
     throw new Error("Missing required fields: proposer, proposedOutcome");
@@ -152,7 +156,7 @@ async function handlePropose(
   const oracleEvent = await prisma.oracleEvent.create({
     data: {
       marketId,
-      proposer,
+      proposer: proposer as string,
       proposed: proposedOutcome === "YES" ? "YES" : "NO",
       proposalTxHash: transactionHash,
       proposalBlock: BigInt(blockNumber),
@@ -198,9 +202,9 @@ async function handleDispute(
   marketId: string,
   transactionHash: string,
   blockNumber: number,
-  data: any
+  data: unknown
 ) {
-  const { disputer } = data;
+  const { disputer } = data as Record<string, unknown>;
 
   if (!disputer) {
     throw new Error("Missing required field: disputer");
@@ -268,9 +272,9 @@ async function handleResolve(
   marketId: string,
   transactionHash: string,
   blockNumber: number,
-  data: any
+  data: unknown
 ) {
-  const { finalOutcome } = data;
+  const { finalOutcome } = data as Record<string, unknown>;
 
   if (!finalOutcome) {
     throw new Error("Missing required field: finalOutcome");
@@ -348,7 +352,7 @@ async function handleFinalize(
   marketId: string,
   transactionHash: string,
   blockNumber: number,
-  data: any
+  data: unknown
 ) {
   // For undisputed outcomes, finalize uses same logic as resolve
   // The difference is on-chain: finalize is called after dispute window expires

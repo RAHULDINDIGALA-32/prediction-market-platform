@@ -110,14 +110,14 @@ export async function POST(req: Request) {
         signature: signature,
         amount: quote.amount,
         cost: quote.cost,
-        nonce: BigInt(quote.nonce) as any,
+        nonce: BigInt(quote.nonce),
         isSell: Boolean(quote.isSell),
         marketVersion: quote.marketVersion,
         minAmountOut: quote.minAmountOut ?? undefined,
         minReturn: quote.minReturn ?? undefined,
       },
     });
-  } catch (err) {
+  } catch {
     // ignore unique constraint errors (quote already stored)
   }
 

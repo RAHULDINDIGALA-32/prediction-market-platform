@@ -55,20 +55,20 @@ function getEIP712Domain(quoteVerifierAddress: string) {
  * 
  * DO NOT use this for signing or verification, as it will cause on-chain signature mismatches.
  */
-const TRADE_QUOTE_TYPES = {
-    TradeQuote: [
-        { name: "trader", type: "address" },
-        { name: "market", type: "address" },
-        { name: "outcome", type: "uint8" },  //  Causes on-chain typehash mismatch!
-        { name: "amount", type: "uint256" },
-        { name: "cost", type: "uint256" },
-        { name: "deadline", type: "uint256" },
-        { name: "nonce", type: "uint256" },
-        { name: "isSell", type: "bool" },
-        { name: "minAmountOut", type: "uint256" },  
-        { name: "minReturn", type: "uint256" },   
-    ],
-};
+// const TRADE_QUOTE_TYPES = {
+//     TradeQuote: [
+//         { name: "trader", type: "address" },
+//         { name: "market", type: "address" },
+//         { name: "outcome", type: "uint8" },  //  Causes on-chain typehash mismatch!
+//         { name: "amount", type: "uint256" },
+//         { name: "cost", type: "uint256" },
+//         { name: "deadline", type: "uint256" },
+//         { name: "nonce", type: "uint256" },
+//         { name: "isSell", type: "bool" },
+//         { name: "minAmountOut", type: "uint256" },  
+//         { name: "minReturn", type: "uint256" },   
+//     ],
+// };
 
 
 export interface TradeQuote {

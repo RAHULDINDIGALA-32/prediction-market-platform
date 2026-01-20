@@ -173,8 +173,7 @@ class AuthorizationCache {
   } {
     const getMapStats = (
       hits: number,
-      misses: number,
-      size: number
+      misses: number
     ): CacheStats => ({
       hits,
       misses,
@@ -185,18 +184,15 @@ class AuthorizationCache {
     return {
       creators: getMapStats(
         this.stats.creatorHits,
-        this.stats.creatorMisses,
-        this.creators.size
+        this.stats.creatorMisses
       ),
       signers: getMapStats(
         this.stats.signerHits,
-        this.stats.signerMisses,
-        this.signers.size
+        this.stats.signerMisses
       ),
       resolvers: getMapStats(
         this.stats.resolverHits,
-        this.stats.resolverMisses,
-        this.resolvers.size
+        this.stats.resolverMisses
       ),
       totalSize:
         this.creators.size + this.signers.size + this.resolvers.size,

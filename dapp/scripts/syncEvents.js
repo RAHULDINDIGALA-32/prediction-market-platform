@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { ethers } = require("ethers");
 const { PrismaClient } = require("@prisma/client");
 

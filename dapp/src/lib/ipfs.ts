@@ -70,7 +70,8 @@ export async function fetchFromIPFS(cid: string): Promise<MarketMetadata> {
  * Compute metadata hash (keccak256 of JSON string)
  */
 export function computeMetadataHash(metadata: MarketMetadata): string {
-  const { keccak256, toUtf8Bytes } = require("ethers");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { keccak256, toUtf8Bytes } = require("ethers") as typeof import("ethers");
   const jsonString = JSON.stringify(metadata, Object.keys(metadata).sort());
   const hash = keccak256(toUtf8Bytes(jsonString));
   return hash;

@@ -63,7 +63,7 @@ export default function OraclePanel() {
 
   const {
     isLoading: isConfirming,
-    isSuccess: isConfirmed,
+    //isSuccess: isConfirmed,
   } = useWaitForTransactionReceipt({
     hash,
   });
@@ -82,8 +82,9 @@ export default function OraclePanel() {
         value,
       });
       setStatus(`Propose transaction submitted: ${txHash}`);
-    } catch (err: any) {
-      setError(err?.message ?? String(err));
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage);
     }
   }
 
@@ -101,8 +102,9 @@ export default function OraclePanel() {
         value,
       });
       setStatus(`Dispute transaction submitted: ${txHash}`);
-    } catch (err: any) {
-      setError(err?.message ?? String(err));
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage);
     }
   }
 
@@ -118,8 +120,9 @@ export default function OraclePanel() {
         args: [market as `0x${string}`, outcome === "YES" ? 0 : 1, isProposerCorrect],
       });
       setStatus(`Resolve transaction submitted: ${txHash}`);
-    } catch (err: any) {
-      setError(err?.message ?? String(err));
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage);
     }
   }
 

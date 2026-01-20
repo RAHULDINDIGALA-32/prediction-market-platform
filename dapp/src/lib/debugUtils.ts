@@ -1,7 +1,7 @@
 import { getPublicClient } from '@wagmi/core';
 import { config } from '@/components/WalletProviders';
 import { keccak256, AbiCoder, recoverAddress } from "ethers";
-import {TypedDataEncoder} from "ethers";
+import { TypedDataEncoder } from "ethers";
 
 
 const abi = AbiCoder.defaultAbiCoder();
@@ -97,40 +97,56 @@ export async function simulateExecuteTrade(
     console.log('Result:', result);
 
     return result;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Simulation failed with error:');
-    console.error('Error message:', error.message);
 
-    // Extract revert reason if available
-    if (error.message && error.message.includes('reverted')) {
-      console.error('🚨 Contract reverted!');
+    if (error instanceof Error) {
+      console.error('Error message:', error.message);
 
-      // Try to extract the revert reason from the error
-      const revertMatch = error.message.match(/reverted with reason string ['"](.*)['"]/);
-      if (revertMatch) {
-        console.error('Revert reason:', revertMatch[1]);
-      } else {
-        // Look for other patterns
-        const customRevertMatch = error.message.match(/execution reverted: (.*)/);
-        if (customRevertMatch) {
-          console.error('Revert details:', customRevertMatch[1]);
+      if (error.message.includes('reverted')) {
+        console.error('🚨 Contract reverted!');
+
+        const revertMatch =
+          error.message.match(/reverted with reason string ['"](.*)['"]/);
+        if (revertMatch) {
+          console.error('Revert reason:', revertMatch[1]);
+        } else {
+          const customRevertMatch =
+            error.message.match(/execution reverted: (.*)/);
+          if (customRevertMatch) {
+            console.error('Revert details:', customRevertMatch[1]);
+          }
         }
       }
+    } else if (
+      typeof error === 'object' &&
+      error !== null &&
+      'message' in error
+    ) {
+      console.error('Error message:', String((error as { message: unknown }).message));
+    } else {
+      console.error('Unknown error:', error);
     }
 
-    if (error.cause) {
-      console.error('Caused by:', error.cause);
+    // Optional: handle viem-specific errors
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'cause' in error
+    ) {
+      console.error('Caused by:', (error as { cause?: unknown }).cause);
     }
 
     throw error;
   }
+
 }
 
 const domain = {
   name: "PredictionMarket-QuoteVerifier",
   version: "1",
-  chainId: 11155111n,              
-  verifyingContract: "0x4a03B6159Dfc32f2ae52E3388377DE3F2fe76602",
+  chainId: BigInt(process.env.NEXT_PUBLIC_CHAIN_ID as string),
+  verifyingContract: process.env.NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS as `0x${string}`,
 };
 
 export interface TradeQuoteData {

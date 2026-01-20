@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { ethers } from "ethers";
 import * as IPFS from "@/lib/ipfs";
+import { Decimal } from "@prisma/client/runtime/library";
 
 interface CreateMarketRequest {
     title: string;
@@ -17,7 +18,7 @@ interface CreateMarketRequest {
     endTime: number; // Unix timestamp
     lmsrB: string; // Wei as string
     ipfsCid?: string; // Pre-uploaded IPFS content
-    metadataJson?: Record<string, any>; // Raw metadata to upload
+    metadataJson?: Record<string, unknown>; // Raw metadata to upload
 }
 
 interface CreateMarketResponse {
@@ -114,7 +115,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<CreateMar
 
         // Handle IPFS metadata
         let ipfsCid = body.ipfsCid;
-        let metadataHash: string;
 
         if (body.metadataJson && !ipfsCid) {
             // Upload metadata to IPFS
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<CreateMar
         }
 
         // Create metadata hash (bytes32 compatible)
-        metadataHash = ethers.keccak256(
+         const metadataHash = ethers.keccak256(
             ethers.toBeHex(ipfsCid, 32)
         );
 
@@ -161,14 +161,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<CreateMar
         const market = await prisma.market.create({
             data: {
                 id: ethers.id(ipfsCid), // Temporary ID based on IPFS
-                metadataHash,
+                metadataHash: metadataHash as `0x${string}`,
                 ipfsCid,
                 title: body.title,
                 description: body.description,
                 category: body.category,
                 resolutionSource: body.resolutionSource,
                 endTime: BigInt(body.endTime),
-                b: new Decimal(body.lmsrB),
+                lmsrB: new Decimal(body.lmsrB),
+                creator: "0x0000000000000000000000000000000000000000",
                 qYes: new Decimal(0),
                 qNo: new Decimal(0),
                 collateral: new Decimal(0),

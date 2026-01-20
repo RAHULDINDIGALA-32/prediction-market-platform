@@ -9,10 +9,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Loader2, Plus, X, Trash2 } from "lucide-react";
+import { AlertTriangle, Loader2, Plus, Trash2 } from "lucide-react";
 import { formatAddress } from "@/lib/utils";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { motion } from "framer-motion";
+
+interface Creator {
+  id: string;
+  address: string;
+  role: "ADMIN" | "EDITOR";
+  createdAt: string;
+}
 
 export default function ManageCreatorsClient() {
   const { address, isConnected } = useAccount();
@@ -251,7 +258,7 @@ export default function ManageCreatorsClient() {
             </div>
           ) : creators && creators.length > 0 ? (
             <div className="space-y-3">
-              {creators.map((creator: any) => (
+              {creators.map((creator: Creator) => (
                 <motion.div
                   key={creator.id}
                   initial={{ opacity: 0, y: 10 }}
@@ -300,4 +307,3 @@ export default function ManageCreatorsClient() {
     </div>
   );
 }
-

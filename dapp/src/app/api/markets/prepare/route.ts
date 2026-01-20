@@ -58,9 +58,10 @@ export async function POST(req: NextRequest) {
     let ipfsCid: string;
     try {
       ipfsCid = await uploadToIPFS(metadata);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
       return NextResponse.json(
-        { error: "Failed to upload to IPFS", details: error.message },
+        { error: "Failed to upload to IPFS", details: errorMessage },
         { status: 500 }
       );
     }
@@ -90,10 +91,11 @@ export async function POST(req: NextRequest) {
       subsidyAmount: marketInput.subsidyAmount,
       metadata,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Market preparation error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: "Internal server error", details: error.message },
+      { error: "Internal server error", details: errorMessage },
       { status: 500 }
     );
   }

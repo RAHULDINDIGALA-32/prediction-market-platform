@@ -10,13 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMarketInfo, useMarketProbabilities, useUserPositions, useEthBalance } from "@/hooks/useMarketData";
-import { useUnsignedQuote, signQuote } from "@/hooks/useQuote";
+import { useUnsignedQuote, signQuote, UnsignedQuote } from "@/hooks/useQuote";
 import { calculateProbability, formatEth, formatTimeRemaining, formatAddress } from "@/lib/utils";
 import { parseContractError } from "@/lib/errors";
-import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
+//import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
 import { AlertTriangle, Clock, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle, Loader } from "lucide-react";
 import TradeConfirmationModal from "@/components/TradeConfirmationModal";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { Decimal } from "@prisma/client/runtime/library";
 
 const MARKET_ABI = [
   {
@@ -51,9 +52,9 @@ const MARKET_ABI = [
 interface Market {
   id: string;
   status: string;
-  qYes: any;
-  qNo: any;
-  collateral: any;
+  qYes: string | bigint;
+  qNo: string | bigint;
+  collateral: string | bigint;
   contractAddress?: string | null;
   createdAt: Date;
   title?: string | null;
@@ -66,8 +67,8 @@ interface Market {
   trades: Array<{
     id: string;
     side: string;
-    amount: any;
-    cost: any;
+    amount: Decimal;
+    cost: Decimal;
     trader: string;
     createdAt: Date;
   }>;
@@ -88,7 +89,7 @@ export default function MarketDetailClient({ market }: Props) {
   const [amount, setAmount] = useState("");
   const [isSell, setIsSell] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [pendingUnsignedQuote, setPendingUnsignedQuote] = useState<any>(null);
+  const [pendingUnsignedQuote, setPendingUnsignedQuote] = useState<UnsignedQuote | null>(null);
   const [signingError, setSigningError] = useState<string | null>(null);
   const [isSigningQuote, setIsSigningQuote] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -116,12 +117,12 @@ export default function MarketDetailClient({ market }: Props) {
   // Request unsigned quote only when amount > 0
   const quoteRequest = address && amount && Number(amount) > 0
     ? {
-        marketId: market.id,
-        trader: address,
-        side,
-        amount: (BigInt(Math.floor(Number(amount) * 1e18))).toString(),
-        isSell,
-      }
+      marketId: market.id,
+      trader: address,
+      side,
+      amount: (BigInt(Math.floor(Number(amount) * 1e18))).toString(),
+      isSell,
+    }
     : null;
 
   const { quote: unsignedQuote, error: quoteError, isLoading: quoteLoading, secondsRemaining, isExpired, refetch } = useUnsignedQuote(quoteRequest);
@@ -136,7 +137,7 @@ export default function MarketDetailClient({ market }: Props) {
   }, [unsignedQuote, isExpired, refetch]);
 
   const { writeContractAsync, isPending: isWriting } = useWriteContract();
-  const { data: receipt, isLoading: isConfirming, isSuccess, isError } = useWaitForTransactionReceipt({
+  const { isSuccess, isError } = useWaitForTransactionReceipt({
     hash: txHash as `0x${string}` | undefined,
   });
 
@@ -298,33 +299,56 @@ export default function MarketDetailClient({ market }: Props) {
           BigInt(signedQuote.quote.minReturn ?? 0),
         ],
         value,
-         gas: BigInt(5000000), // Set a high gas limit to avoid out-of-gas errors
+        gas: BigInt(5000000), // Set a high gas limit to avoid out-of-gas errors
       });
 
       console.log("Transaction sent:", txHashResult);
       setTxHash(txHashResult);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Trade execution failed:", error);
       setTxStatus("failed");
 
       let errorMessage = "Trade execution failed. Please try again.";
-      
-      if (error?.message?.includes("User rejected")) {
-        errorMessage = "Transaction rejected by user";
-      } else if (error?.message?.includes("insufficient") || error?.message?.includes("Insufficient")) {
-        errorMessage = "Insufficient balance or allowance";
-      } else if (error?.message?.includes("REVERT") || error?.data?.message?.includes("REVERT")) {
-        errorMessage = "Transaction reverted on-chain. Check contract state and parameters.";
-      } else if (error?.shortMessage) {
-        errorMessage = error.shortMessage;
-      } else if (error?.message) {
-        errorMessage = error.message;
+
+      if (error instanceof Error) {
+        const message = error.message;
+
+        if (message.includes("User rejected")) {
+          errorMessage = "Transaction rejected by user";
+        } else if (
+          message.includes("insufficient") ||
+          message.includes("Insufficient")
+        ) {
+          errorMessage = "Insufficient balance or allowance";
+        } else if (message.includes("REVERT")) {
+          errorMessage =
+            "Transaction reverted on-chain. Check contract state and parameters.";
+        } else {
+          errorMessage = message;
+        }
+
+        // wagmi / viem errors often attach extra fields
+        if (
+          "shortMessage" in error &&
+          typeof (error as { shortMessage?: unknown }).shortMessage === "string"
+        ) {
+          errorMessage = (error as { shortMessage: string }).shortMessage;
+        }
+
+        if (
+          "data" in error &&
+          typeof (error as { data?: { message?: unknown } }).data?.message ===
+          "string"
+        ) {
+          errorMessage = (error as { data: { message: string } }).data.message;
+        }
       }
 
       setSigningError(errorMessage);
     } finally {
       setIsSigningQuote(false);
     }
+
   };
 
   const impliedProbability = unsignedQuote && unsignedQuote.quote
@@ -630,13 +654,12 @@ export default function MarketDetailClient({ market }: Props) {
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`rounded-lg border-2 p-4 space-y-3 ${
-                  txStatus === "pending"
+                className={`rounded-lg border-2 p-4 space-y-3 ${txStatus === "pending"
                     ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20"
                     : txStatus === "confirmed"
-                    ? "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20"
-                    : "border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20"
-                }`}
+                      ? "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20"
+                      : "border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20"
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   {txStatus === "pending" && (
@@ -649,24 +672,22 @@ export default function MarketDetailClient({ market }: Props) {
                     <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
                   )}
                   <div className="flex-1">
-                    <div className={`font-semibold text-sm ${
-                      txStatus === "pending"
+                    <div className={`font-semibold text-sm ${txStatus === "pending"
                         ? "text-blue-900 dark:text-blue-100"
                         : txStatus === "confirmed"
-                        ? "text-green-900 dark:text-green-100"
-                        : "text-red-900 dark:text-red-100"
-                    }`}>
+                          ? "text-green-900 dark:text-green-100"
+                          : "text-red-900 dark:text-red-100"
+                      }`}>
                       {txStatus === "pending" && "Transaction Pending..."}
                       {txStatus === "confirmed" && "Trade Executed Successfully! ✓"}
                       {txStatus === "failed" && "Transaction Failed"}
                     </div>
-                    <div className={`text-xs mt-1 ${
-                      txStatus === "pending"
+                    <div className={`text-xs mt-1 ${txStatus === "pending"
                         ? "text-blue-700 dark:text-blue-300"
                         : txStatus === "confirmed"
-                        ? "text-green-700 dark:text-green-300"
-                        : "text-red-700 dark:text-red-300"
-                    }`}>
+                          ? "text-green-700 dark:text-green-300"
+                          : "text-red-700 dark:text-red-300"
+                      }`}>
                       Hash: <span className="font-mono break-all">{txHash.slice(0, 10)}...{txHash.slice(-8)}</span>
                     </div>
                   </div>
@@ -711,12 +732,12 @@ export default function MarketDetailClient({ market }: Props) {
               {quoteLoading
                 ? "Getting quote..."
                 : isExpired
-                ? "Quote Expired"
-                : !unsignedQuote
-                ? "Enter amount"
-                : isAmountExceedsSellBalance || isAmountExceedsEthBalance
-                ? "Insufficient Balance"
-                : "Review Trade"}
+                  ? "Quote Expired"
+                  : !unsignedQuote
+                    ? "Enter amount"
+                    : isAmountExceedsSellBalance || isAmountExceedsEthBalance
+                      ? "Insufficient Balance"
+                      : "Review Trade"}
             </Button>
 
             {!address && (
@@ -757,9 +778,9 @@ export default function MarketDetailClient({ market }: Props) {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-semibold">{formatEth(trade.amount, 2)}</div>
+                    <div className="text-sm font-semibold">{formatEth(trade.amount.toString(), 2)}</div>
                     <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                      {formatEth(trade.cost, 4)}
+                      {formatEth(trade.cost.toString(), 4)}
                     </div>
                   </div>
                 </div>
@@ -775,7 +796,7 @@ export default function MarketDetailClient({ market }: Props) {
           quote={{
             quote: {
               ...pendingUnsignedQuote.quote,
-              marketId: market.id,
+              market: market.id,
             },
             signature: "", // Will be generated during execution
           }}

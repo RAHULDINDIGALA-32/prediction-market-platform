@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-      } catch (error) {
+      } catch {
         return NextResponse.json(
           {
             success: false,
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
  * GET /api/admin/signers
  * Fetch all authorized signers (without private keys)
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const signers = await prisma.authorizedSigner.findMany({
       where: { isAllowed: true },

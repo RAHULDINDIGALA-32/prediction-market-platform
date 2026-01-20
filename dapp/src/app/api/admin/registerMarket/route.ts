@@ -16,7 +16,8 @@ export async function POST(req: Request) {
   try {
     await prisma.market.update({ where: { id: marketId }, data: { contractAddress } });
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ ok: false, error: err.message }), { status: 500 });
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    return new Response(JSON.stringify({ ok: false, error: errorMessage }), { status: 500 });
   }
 }
