@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron/sync-auth",
-      "schedule": "*/5 * * * *"
-    }
-  ]
-}
