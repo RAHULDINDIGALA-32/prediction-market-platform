@@ -2,21 +2,90 @@ name: Forge CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
 
 jobs:
   forge-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
     steps:
-      - uses: actions/checkout@v4
-      - name: Setup Foundry
-        uses: smartcontractkit/setup-foundry@v1
-      - name: Install dependencies
-        run: |
-          cd dapp || true
-          npm ci || true
-      - name: Run forge tests
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Cache Foundry builds
+        uses: actions/cache@v3
+        with:
+          path: |
+            foundry/.foundry/
+            foundry/cache/
+            foundry/out/
+          key: ${{ runner.os }}-foundry-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-foundry-
+
+      - name: Install Solc
+        run: forge install
+        working-directory: foundry
+
+      - name: Check formatting
+        run: forge fmt --check
+        working-directory: foundry
+
+      - name: Run Forge tests
         run: forge test -v
         working-directory: foundry
+
+      - name: Run Forge tests with coverage
+        run: forge coverage --report lcov
+        working-directory: foundry
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./foundry/lcov.info
+          fail_ci_if_error: false
+          verbose: true
+
+  build-nextjs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dApp dependencies
+        run: |
+          cd dapp
+          npm ci
+
+      - name: Run linting
+        run: |
+          cd dapp
+          npm run lint
+
+      - name: Build Next.js app
+        run: |
+          cd dapp
+          npm run build
+
+      - name: Run Prisma checks
+        run: |
+          cd dapp
+          npm run prisma:generate

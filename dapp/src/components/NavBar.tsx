@@ -31,7 +31,7 @@ export default function NavBar({ children }: Props) {
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
       <header className="border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+        <div className="mx-auto md:mx-10 lg:mx-20 flex max-w-6xl items-center justify-between px-3 py-3 sm:px-0">
           <Link href="/" className="text-lg font-bold ">
             <div className="flex items-center gap-3 ">
               {/* Logo */}
@@ -59,7 +59,7 @@ export default function NavBar({ children }: Props) {
             </div>
           </Link>
 
-          <nav className="hidden items-center gap-2 text-sm font-medium sm:flex">
+          <nav className="hidden items-center gap-3 text-sm font-medium sm:flex">
             {routes.map((route) => {
               if (route.requiresCreator || route.requiresAdmin) {
                 return null; 
@@ -107,7 +107,7 @@ export default function NavBar({ children }: Props) {
       </header>
       
       {/* Main Content */}
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-3 py-8 sm:px-0">{children}</main>
     </div>
   );
 }
