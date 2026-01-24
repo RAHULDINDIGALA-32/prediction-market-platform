@@ -13,7 +13,7 @@ import { useMarketInfo, useMarketProbabilities, useUserPositions, useEthBalance 
 import { useUnsignedQuote, signQuote, UnsignedQuote } from "@/hooks/useQuote";
 import { calculateProbability, formatEth, formatTimeRemaining, formatAddress } from "@/lib/utils";
 import { parseContractError } from "@/lib/errors";
-//import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
+import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
 import { AlertTriangle, Clock, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle, Loader } from "lucide-react";
 import TradeConfirmationModal from "@/components/TradeConfirmationModal";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
@@ -238,7 +238,7 @@ export default function MarketDetailClient({ market }: Props) {
 
       // Step 1: Sign the quote
       const signedQuote = await signQuote(pendingUnsignedQuote, market.id);
-      console.log("Signed quote (outcome already converted to contract enum):", signedQuote);
+      
 
       // Step 2: Execute on-chain transaction
       // The outcome in signedQuote is already in contract format (1 or 2)
@@ -267,25 +267,25 @@ export default function MarketDetailClient({ market }: Props) {
       }
 
       // Step 3: Debug - simulate the transaction first
-      // try {
-      //   const recoveredSigner = recoverSigner(quoteStruct, signedQuote.signature as `0x${string}`);
-      //   console.log("Recovered signer:", recoveredSigner);
+      try {
+        const recoveredSigner = recoverSigner(quoteStruct, signedQuote.signature as `0x${string}`);
+        console.log("Recovered signer:", recoveredSigner);
 
-      //   await simulateExecuteTrade(
-      //     signedQuote.quote.market as `0x${string}`,
-      //     quoteStruct,
-      //     signedQuote.signature as `0x${string}`,
-      //     BigInt(signedQuote.quote.minAmountOut ?? 0),
-      //     BigInt(signedQuote.quote.minReturn ?? 0),
-      //     value
-      //   );
-      //   console.log("✅ Debug simulation passed - proceeding with actual transaction");
-      // } catch (simError) {
-      //   console.error("🚨 Debug simulation failed - transaction would likely fail:", simError);
-      //   // For debugging, you might want to continue or stop here
-      //   // For now, we'll continue but log the warning
-      // }
+        await simulateExecuteTrade(
+          signedQuote.quote.market as `0x${string}`,
+          quoteStruct,
+          signedQuote.signature as `0x${string}`,
+          BigInt(signedQuote.quote.minAmountOut ?? 0),
+          BigInt(signedQuote.quote.minReturn ?? 0),
+          value
+        );
+        console.log("✅ Debug simulation passed - proceeding with actual transaction");
+      } catch (simError) {
+        console.error("🚨 Debug simulation failed - transaction would likely fail:", simError);
 
+      }
+
+      setShowConfirmModal(false);
       setTxStatus("pending");
 
       const txHashResult = await writeContractAsync({
@@ -327,7 +327,7 @@ export default function MarketDetailClient({ market }: Props) {
           errorMessage = message;
         }
 
-        // wagmi / viem errors often attach extra fields
+      
         if (
           "shortMessage" in error &&
           typeof (error as { shortMessage?: unknown }).shortMessage === "string"

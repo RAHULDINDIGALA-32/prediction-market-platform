@@ -42,7 +42,7 @@ export async function getSignerWallet(signerAddress: string): Promise<ethers.Wal
     return null;
   }
 
-  const encryptionKey = process.env.ENCRYPTION_KEY;
+  const encryptionKey = process.env.NEXT_PUBLIC_ENCRYPTION_KEY;
   if (!encryptionKey) {
     throw new Error('ENCRYPTION_KEY not configured');
   }

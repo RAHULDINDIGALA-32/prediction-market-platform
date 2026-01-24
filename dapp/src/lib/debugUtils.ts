@@ -1,16 +1,18 @@
 import { getPublicClient } from '@wagmi/core';
 import { config } from '@/components/WalletProviders';
 import { keccak256, AbiCoder, recoverAddress } from "ethers";
-import { TypedDataEncoder } from "ethers";
+import { TypedDataEncoder, toUtf8Bytes } from "ethers";
 
 
 const abi = AbiCoder.defaultAbiCoder();
 
 const TRADE_QUOTE_TYPEHASH = keccak256(
-  new TextEncoder().encode(
+   toUtf8Bytes(
     "TradeQuote(address trader,address market,Outcome outcome,uint256 amount,uint256 cost,uint256 deadline,uint256 nonce,bool isSell,uint256 minAmountOut,uint256 minReturn)"
-  )
+    )
 );
+
+console.log('Trade Quote Typehash:', TRADE_QUOTE_TYPEHASH);
 
 const MARKET_ABI = [
   {
@@ -205,6 +207,8 @@ export function recoverSigner(
       ["0x1901", domainSeparator, structHash]
     )
   );
+
+  console.log('Digest for signature recovery:', digest);
 
   return recoverAddress(digest, signature);
 }

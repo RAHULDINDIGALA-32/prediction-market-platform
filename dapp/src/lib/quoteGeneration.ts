@@ -6,7 +6,7 @@
  */
 
 import { ethers, keccak256, AbiCoder, TypedDataEncoder, Wallet,
-  Signature, } from "ethers";
+  Signature, solidityPacked } from "ethers";
 import { lmsrCost } from "./lmsr/math";
 
 const abi = AbiCoder.defaultAbiCoder();
@@ -147,12 +147,18 @@ function computeEIP712Digest(
   const structHash = hashTradeQuoteStruct(quote);
   const domainSeparator = TypedDataEncoder.hashDomain(domain);
 
-  return keccak256(
-    abi.encode(
+//   console.log('Struct Hash for digest computation:', structHash);
+//   console.log('Domain Separator for digest computation:', domainSeparator);
+
+// don't use abi.encode here, use solidityPacked to match on-chain packed-encoding
+const digest =  keccak256(
+    solidityPacked(
       ["bytes2", "bytes32", "bytes32"],
       ["0x1901", domainSeparator, structHash]
     )
   ) as `0x${string}`;
+  
+  return digest;
 }
 
 /**
@@ -314,8 +320,8 @@ export function signTradeQuote(
 ): SignedTradeQuote {
   const domain = getEIP712Domain(quoteVerifierAddress);  
   const digest = computeEIP712Digest(quote, domain);
+ //console.log('Digest to be signed:', digest);
 
- 
   const sig = signer.signingKey.sign(digest);
   const signature = Signature.from(sig).serialized as `0x${string}`;
 
