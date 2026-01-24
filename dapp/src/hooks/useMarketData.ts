@@ -37,7 +37,7 @@ const MARKET_ABI = [
 ] as const;
 
 export function useMarketInfo(marketAddress?: `0x${string}`) {
-  return useReadContract({
+  const result = useReadContract({
     address: marketAddress,
     abi: MARKET_ABI,
     functionName: "getMarketInfo",
@@ -45,6 +45,10 @@ export function useMarketInfo(marketAddress?: `0x${string}`) {
       enabled: !!marketAddress,
     },
   });
+
+  console.log("Market Info Data (utility):", result);
+
+  return result;
 }
 
 export function useMarketProbabilities(
@@ -69,25 +73,28 @@ export function useMarketProbabilities(
     functionName: "totalSupply";
   }>;
 
-  const { data, ...rest } = useReadContracts({
+  const { data, refetch, ...rest } = useReadContracts({
     contracts,
     query: {
       enabled: !!marketAddress && !!yesToken && !!noToken,
+      refetchInterval: 10000, // Refetch every 10 seconds
+      staleTime: 5000, // Consider data stale after 5 seconds
     },
   });
 
-  const probabilities = data
-    ? calculateProbability(
-        data[0]?.result ?? 0n,
-        data[1]?.result ?? 0n
-      )
-    : { yes: 0.5, no: 0.5 };
+  console.log("Market Probabilities Data (utility):", data);
+  
+  const yesSupply = data?.[0]?.result ?? 0n;
+  const noSupply = data?.[1]?.result ?? 0n;
+
+  const probabilities = calculateProbability(yesSupply, noSupply);
 
   return {
-    ...rest,
     data: probabilities,
-    yesSupply: data?.[0]?.result ?? 0n,
-    noSupply: data?.[1]?.result ?? 0n,
+    yesSupply,
+    noSupply,
+    refetch,
+    ...rest,
   };
 }
 
@@ -116,17 +123,25 @@ export function useUserPositions(
     args: [`0x${string}`];
   }>;
 
-  const { data, ...rest } = useReadContracts({
+  const { data, refetch, ...rest } = useReadContracts({
     contracts,
     query: {
       enabled: !!userAddress && !!yesToken && !!noToken,
+      refetchInterval: 10000, // Refetch every 10 seconds
+      staleTime: 5000, // Consider data stale after 5 seconds
     },
   });
 
+  console.log("User Positions Data (utility):", data);
+
+  const yesBalance = data?.[0]?.result ?? 0n;
+  const noBalance = data?.[1]?.result ?? 0n;
+
   return {
+    yesBalance,
+    noBalance,
+    refetch,
     ...rest,
-    yesBalance: data?.[0]?.result ?? 0n,
-    noBalance: data?.[1]?.result ?? 0n,
   };
 }
 
@@ -135,17 +150,18 @@ export function useUserPositions(
  * Returns balance in wei
  */
 export function useEthBalance(userAddress?: `0x${string}`) {
-  const { data, ...rest } = useBalance({
+  const { data, refetch, ...rest } = useBalance({
     address: userAddress,
     query: {
       enabled: !!userAddress,
+      refetchInterval: 10000, // Refetch every 10 seconds
+      staleTime: 5000, // Consider data stale after 5 seconds
     },
   });
 
   return {
-    ...rest,
     balance: data?.value ?? 0n,
+    refetch,
+    ...rest,
   };
 }
-
-

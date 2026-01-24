@@ -108,7 +108,7 @@ export default function MarketCard({ market }: Props) {
                   Volume
                 </div>
                 <div className="text-sm font-semibold">
-                  {formatEth(market.collateral, 2)}
+                  {formatEth(BigInt(market.collateral), 4)}
                 </div>
               </div>
               {market.endTime && (

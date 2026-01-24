@@ -6,7 +6,7 @@ import {
   RainbowKitProvider,
   lightTheme
 } from "@rainbow-me/rainbowkit";
-import { WagmiProvider } from "wagmi";
+import { WagmiProvider, http } from "wagmi";
 import {
   mainnet,
   sepolia,
@@ -21,7 +21,11 @@ const projectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "demo-project-id";
 
 const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? "11155111"); // default sepolia
+const SEPOLIA_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL
 
+if (!SEPOLIA_RPC_URL) {
+  throw new Error("Missing NEXT_PUBLIC_RPC_URL environment variable");
+}
 const availableChains = [mainnet, sepolia, base];
 const defaultChain =
   availableChains.find((c) => c.id === chainId) ?? sepolia;
@@ -30,6 +34,9 @@ const config = getDefaultConfig({
   appName: "Prediction Market Dapp",
   projectId,
   chains: [defaultChain],
+  transports: {
+    [sepolia.id]: http(SEPOLIA_RPC_URL),
+  },
   ssr: true,
 });
 

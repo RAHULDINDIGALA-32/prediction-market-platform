@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAccount } from "wagmi";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,6 @@ import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
 import { AlertTriangle, Clock, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle, Loader } from "lucide-react";
 import TradeConfirmationModal from "@/components/TradeConfirmationModal";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { Decimal } from "@prisma/client/runtime/library";
 
 const MARKET_ABI = [
   {
@@ -67,8 +67,8 @@ interface Market {
   trades: Array<{
     id: string;
     side: string;
-    amount: Decimal;
-    cost: Decimal;
+    amount: string;
+    cost: string;
     trader: string;
     createdAt: Date;
   }>;
@@ -78,41 +78,83 @@ interface Props {
   market: Market;
 }
 
-const ESTIMATED_GAS_COST = BigInt(150000); // Estimated gas units for a trade
-const GAS_PRICE_GWEI = BigInt(50); // Estimate 50 gwei
+const ESTIMATED_GAS_COST = BigInt(150000);
+const GAS_PRICE_GWEI = BigInt(50);
 const SCALE_GWEI = 1_000_000_000n;
 const SCALE_WEI = 1_000_000_000_000_000_000n;
 
 export default function MarketDetailClient({ market }: Props) {
   const { address } = useAccount();
+  const queryClient = useQueryClient();
   const [side, setSide] = useState<"YES" | "NO">("YES");
   const [amount, setAmount] = useState("");
   const [isSell, setIsSell] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingUnsignedQuote, setPendingUnsignedQuote] = useState<UnsignedQuote | null>(null);
+  const [pendingSignedQuote, setPendingSignedQuote] = useState<any>(null);
   const [signingError, setSigningError] = useState<string | null>(null);
   const [isSigningQuote, setIsSigningQuote] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txStatus, setTxStatus] = useState<"pending" | "confirmed" | "failed" | null>(null);
+  const [txBlockNumber, setTxBlockNumber] = useState<number | null>(null);
+  const [isRecordingTrade, setIsRecordingTrade] = useState(false);
 
-  const marketAddress = market.contractAddress as `0x${string}` | undefined;
-  const { data: marketInfo } = useMarketInfo(marketAddress);
+  const marketAddress = market.contractAddress as `0x${string}` || market.id as `0x${string}`;
+const marketInfoQuery = useMarketInfo(marketAddress);
 
-  // Get token addresses from market info
-  const yesToken = marketInfo?.[2] as `0x${string}` | undefined;
-  const noToken = marketInfo?.[3] as `0x${string}` | undefined;
-  const endTime = marketInfo?.[1];
+const tokens = useMemo(() => {
+  if (!marketInfoQuery.data) return null;
 
-  const { data: probabilities, yesSupply, noSupply } = useMarketProbabilities(
-    marketAddress,
-    yesToken,
-    noToken
-  );
+  return {
+    yes: marketInfoQuery.data[2] as `0x${string}`,
+    no: marketInfoQuery.data[3] as `0x${string}`,
+  };
+}, [marketInfoQuery.data]);
 
-  const positions = useUserPositions(address, yesToken, noToken);
-  const { balance: ethBalance } = useEthBalance(address);
 
-  const displayProbs = probabilities || calculateProbability(market.qYes, market.qNo);
+  // const yesToken = tokens?.yes;
+  // const noToken = tokens?.no;
+  const endTime = marketInfoQuery.data?.[1];
+
+  // Get market probabilities with proper hook usage
+const hasTokens = !!tokens?.yes && !!tokens?.no;
+
+const probabilitiesQuery = useMarketProbabilities(
+  hasTokens ? marketAddress : undefined,
+  tokens?.yes,
+  tokens?.no
+);
+
+const probabilities = probabilitiesQuery.data;
+const yesSupply = probabilitiesQuery.yesSupply;
+const noSupply = probabilitiesQuery.noSupply;
+
+  console.log("Market Probabilities Data (component):", probabilities);
+
+  // Get user positions with proper hook usage
+const positionsQuery = useUserPositions(
+  hasTokens ? address : undefined,
+  tokens?.yes,
+  tokens?.no
+);
+
+const yesBalance = positionsQuery ? positionsQuery.yesBalance : 0n;
+const noBalance = positionsQuery ? positionsQuery.noBalance : 0n;
+
+  // Get ETH balance with proper hook usage
+  const { 
+    balance: ethBalance, 
+    refetch: refetchEthBalance 
+  } = useEthBalance(address);
+
+  // Calculate display probabilities - use hook data if available, otherwise fallback to market data
+  const displayProbs = useMemo(() => {
+    if (probabilities && (probabilities.yes !== 0.5 || probabilities.no !== 0.5)) {
+      return probabilities;
+    }
+    // Fallback to market data
+    return calculateProbability(market.qYes, market.qNo);
+  }, [probabilities, market.qYes, market.qNo]);
 
   // Request unsigned quote only when amount > 0
   const quoteRequest = address && amount && Number(amount) > 0
@@ -137,96 +179,161 @@ export default function MarketDetailClient({ market }: Props) {
   }, [unsignedQuote, isExpired, refetch]);
 
   const { writeContractAsync, isPending: isWriting } = useWriteContract();
-  const { isSuccess, isError } = useWaitForTransactionReceipt({
+  const { isSuccess, isError, data: txReceipt } = useWaitForTransactionReceipt({
     hash: txHash as `0x${string}` | undefined,
   });
 
-  // Update transaction status based on receipt
+  // Handle transaction confirmation and record trade to database
   useEffect(() => {
-    if (isSuccess) {
+    if (isSuccess && txReceipt && !isRecordingTrade) {
       setTxStatus("confirmed");
-      // Auto-close modal and reset form after successful confirmation
+      setTxBlockNumber(Number(txReceipt.blockNumber));
+      recordTradeToDatabase();
+    } else if (isError) {
+      setTxStatus("failed");
+    }
+  }, [isSuccess, isError, txReceipt, isRecordingTrade]);
+
+  // Record trade to database after on-chain confirmation
+  const recordTradeToDatabase = async () => {
+    if (!txHash || !pendingSignedQuote || !address || txBlockNumber === null) {
+      console.error("Missing required data to record trade", {
+        txHash,
+        hasPendingSignedQuote: !!pendingSignedQuote,
+        address,
+        txBlockNumber,
+      });
+      return;
+    }
+
+    try {
+      setIsRecordingTrade(true);
+
+      const dbPayload = {
+        txHash,
+        txBlockNumber,
+        marketId: market.id,
+        trader: address,
+        outcome: (pendingSignedQuote.quote.outcome - 1) as 0 | 1,
+        amount: pendingSignedQuote.quote.amount,
+        cost: pendingSignedQuote.quote.cost,
+        isSell: pendingSignedQuote.quote.isSell,
+        nonce: pendingSignedQuote.quote.nonce,
+        marketVersion: pendingSignedQuote.quote.marketVersion,
+        signature: pendingSignedQuote.signature,
+      };
+
+      console.log("Recording trade to database:", dbPayload);
+
+      const response = await fetch("/api/trades/execute", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(dbPayload),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to record trade");
+      }
+
+      const result = await response.json();
+      console.log("Trade recorded successfully:", result);
+
+      await invalidateAndRefreshData();
+
       setTimeout(() => {
         setShowConfirmModal(false);
         setAmount("");
         setPendingUnsignedQuote(null);
+        setPendingSignedQuote(null);
         setTxHash(null);
         setTxStatus(null);
-      }, 3000); // Show success for 3 seconds
-    } else if (isError) {
-      setTxStatus("failed");
+        setTxBlockNumber(null);
+      }, 2000);
+    } catch (error) {
+      console.error("Error recording trade to database:", error);
+      setSigningError(`Database error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsRecordingTrade(false);
     }
-  }, [isSuccess, isError]);
+  };
+
+  // Invalidate React Query cache and refetch data
+  const invalidateAndRefreshData = async () => {
+    try {
+      await queryClient.invalidateQueries({ queryKey: ["portfolio", address] });
+      await queryClient.invalidateQueries({ queryKey: ["portfolio-stats", address] });
+
+      await Promise.all([
+        marketInfoQuery.refetch,
+        probabilitiesQuery.refetch,
+        positionsQuery.refetch,
+        refetchEthBalance(),
+      ]);
+
+      await queryClient.invalidateQueries({ 
+        queryKey: ["readContracts"],
+        exact: false,
+      });
+
+      console.log("Data refresh completed");
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+    }
+  };
 
   // Calculate max buyable / sellable
   const calculateMaxAmount = (): string => {
     if (!address) return "0";
 
     if (isSell) {
-      // For selling: total tokens they have
-      const tokenBalance = side === "YES" ? positions.yesBalance : positions.noBalance;
+      const tokenBalance = side === "YES" ? yesBalance : noBalance;
       return formatEth(tokenBalance, 4).replace(" ETH", "");
     } else {
-      // For buying: max they can afford with ETH (accounting for gas)
       if (!unsignedQuote || !unsignedQuote.quote?.cost) {
-        // Estimate: (balance - gas cost) / average cost per token
         const estimatedGasCost = ESTIMATED_GAS_COST * GAS_PRICE_GWEI * SCALE_GWEI;
         const availableEth = ethBalance > estimatedGasCost ? ethBalance - estimatedGasCost : 0n;
-        // Rough estimate: assume cost ≈ amount (conservative)
         return formatEth(availableEth / BigInt(2), 4).replace(" ETH", "");
       }
 
-      // Actual calculation with current quote cost
       const quoteCost = BigInt(unsignedQuote.quote.cost);
       const estimatedGasCost = (ESTIMATED_GAS_COST * GAS_PRICE_GWEI * BigInt(1e9)) / BigInt(1e18);
       const availableEth = ethBalance > estimatedGasCost ? ethBalance - estimatedGasCost : 0n;
 
       if (availableEth === 0n) return "0";
 
-      // Max tokens = available ETH / cost per token
-      // If amount * cost = totalCost, then max_amount = available_eth / (cost / amount)
       const currentAmount = BigInt(unsignedQuote.quote.amount);
       if (currentAmount === 0n) return "0";
 
-      const costPerToken = (quoteCost * SCALE_WEI) / currentAmount; // Wei per token
+      const costPerToken = (quoteCost * SCALE_WEI) / currentAmount;
       const maxTokens = (availableEth * SCALE_WEI) / costPerToken;
 
       return formatEth(maxTokens, 4).replace(" ETH", "");
     }
   };
 
-  // Validation checks
-  const yesBalance = positions.yesBalance;
-  const noBalance = positions.noBalance;
   const selectedBalance = side === "YES" ? yesBalance : noBalance;
-
   const amountBigInt = amount ? BigInt(Math.floor(Number(amount) * 1e18)) : 0n;
   const isAmountExceedsSellBalance = isSell && amountBigInt > selectedBalance;
   const isAmountExceedsEthBalance = !isSell && unsignedQuote && BigInt(unsignedQuote.quote.cost) > ethBalance;
 
-  // Handle max button click
   const handleMaxClick = () => {
     const maxAmount = calculateMaxAmount();
     setAmount(maxAmount);
   };
 
-  // Handle amount change
   const handleAmountChange = (value: string) => {
-    // Only allow numbers and decimals
     if (value === "" || /^\d*\.?\d*$/.test(value)) {
       setAmount(value);
     }
   };
 
-  // Handle trade confirmation
   const handleTradeClick = async () => {
     if (!unsignedQuote || !address) return;
-
     setPendingUnsignedQuote(unsignedQuote);
     setShowConfirmModal(true);
   };
 
-  // Execute trade after signing
   const executeTrade = async () => {
     if (!pendingUnsignedQuote || !address) return;
 
@@ -236,17 +343,13 @@ export default function MarketDetailClient({ market }: Props) {
       setTxStatus(null);
       setTxHash(null);
 
-      // Step 1: Sign the quote
       const signedQuote = await signQuote(pendingUnsignedQuote, market.id);
-      
-
-      // Step 2: Execute on-chain transaction
-      // The outcome in signedQuote is already in contract format (1 or 2)
+      setPendingSignedQuote(signedQuote);
 
       const quoteStruct = {
         trader: signedQuote.quote.trader as `0x${string}`,
         market: signedQuote.quote.market as `0x${string}`,
-        outcome: signedQuote.quote.outcome as 1 | 2, // Already contract enum (1 or 2) - signature was computed over this value
+        outcome: signedQuote.quote.outcome as 1 | 2,
         amount: BigInt(signedQuote.quote.amount),
         cost: BigInt(signedQuote.quote.cost),
         deadline: BigInt(signedQuote.quote.deadline),
@@ -256,17 +359,14 @@ export default function MarketDetailClient({ market }: Props) {
         minReturn: BigInt(signedQuote.quote.minReturn ?? 0),
       };
 
-      console.log("Quote struct for contract (outcome from signed quote):", quoteStruct);
+      console.log("Quote struct for contract:", quoteStruct);
 
-      // Validate value matches cost for buys
       const value = signedQuote.quote.isSell ? 0n : BigInt(signedQuote.quote.cost);
-      console.log("Transaction value:", value.toString(), "wei", "cost:", signedQuote.quote.cost);
 
       if (!signedQuote.quote.isSell && value !== BigInt(signedQuote.quote.cost)) {
         throw new Error("Value mismatch: ETH amount must exactly match quote cost");
       }
 
-      // Step 3: Debug - simulate the transaction first
       try {
         const recoveredSigner = recoverSigner(quoteStruct, signedQuote.signature as `0x${string}`);
         console.log("Recovered signer:", recoveredSigner);
@@ -279,10 +379,9 @@ export default function MarketDetailClient({ market }: Props) {
           BigInt(signedQuote.quote.minReturn ?? 0),
           value
         );
-        console.log("✅ Debug simulation passed - proceeding with actual transaction");
+        console.log("✅ Debug simulation passed");
       } catch (simError) {
-        console.error("🚨 Debug simulation failed - transaction would likely fail:", simError);
-
+        console.error("🚨 Debug simulation failed:", simError);
       }
 
       setShowConfirmModal(false);
@@ -299,7 +398,7 @@ export default function MarketDetailClient({ market }: Props) {
           BigInt(signedQuote.quote.minReturn ?? 0),
         ],
         value,
-        gas: BigInt(5000000), // Set a high gas limit to avoid out-of-gas errors
+        gas: BigInt(5000000),
       });
 
       console.log("Transaction sent:", txHashResult);
@@ -315,31 +414,19 @@ export default function MarketDetailClient({ market }: Props) {
 
         if (message.includes("User rejected")) {
           errorMessage = "Transaction rejected by user";
-        } else if (
-          message.includes("insufficient") ||
-          message.includes("Insufficient")
-        ) {
+        } else if (message.includes("insufficient") || message.includes("Insufficient")) {
           errorMessage = "Insufficient balance or allowance";
         } else if (message.includes("REVERT")) {
-          errorMessage =
-            "Transaction reverted on-chain. Check contract state and parameters.";
+          errorMessage = "Transaction reverted on-chain. Check contract state and parameters.";
         } else {
           errorMessage = message;
         }
 
-      
-        if (
-          "shortMessage" in error &&
-          typeof (error as { shortMessage?: unknown }).shortMessage === "string"
-        ) {
+        if ("shortMessage" in error && typeof (error as { shortMessage?: unknown }).shortMessage === "string") {
           errorMessage = (error as { shortMessage: string }).shortMessage;
         }
 
-        if (
-          "data" in error &&
-          typeof (error as { data?: { message?: unknown } }).data?.message ===
-          "string"
-        ) {
+        if ("data" in error && typeof (error as { data?: { message?: unknown } }).data?.message === "string") {
           errorMessage = (error as { data: { message: string } }).data.message;
         }
       }
@@ -348,7 +435,6 @@ export default function MarketDetailClient({ market }: Props) {
     } finally {
       setIsSigningQuote(false);
     }
-
   };
 
   const impliedProbability = unsignedQuote && unsignedQuote.quote
@@ -356,9 +442,7 @@ export default function MarketDetailClient({ market }: Props) {
     : displayProbs.yes;
 
   const isMarketOpen = market.status === "OPEN";
-  const isMarketClosingSoon = endTime
-    ? Number(endTime) * 1000 - Date.now() < 3600000
-    : false;
+  const isMarketClosingSoon = endTime ? Number(endTime) * 1000 - Date.now() < 3600000 : false;
 
   return (
     <div className="space-y-6">
@@ -454,11 +538,11 @@ export default function MarketDetailClient({ market }: Props) {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <div className="text-zinc-500 dark:text-zinc-400 mb-1">YES Supply</div>
-                    <div className="font-semibold">{formatEth(yesSupply || 0n, 2)}</div>
+                    <div className="font-semibold">{yesSupply.toString()}</div>
                   </div>
                   <div>
                     <div className="text-zinc-500 dark:text-zinc-400 mb-1">NO Supply</div>
-                    <div className="font-semibold">{formatEth(noSupply || 0n, 2)}</div>
+                    <div className="font-semibold">{noSupply.toString()}</div>
                   </div>
                 </div>
               </div>
@@ -648,7 +732,6 @@ export default function MarketDetailClient({ market }: Props) {
                 {signingError}
               </div>
             )}
-
             {/* Transaction Status UI */}
             {txHash && (
               <motion.div
@@ -771,16 +854,16 @@ export default function MarketDetailClient({ market }: Props) {
                       <TrendingDown className="h-4 w-4 text-red-600" />
                     )}
                     <div>
-                      <div className="text-sm font-medium">{trade.side}</div>
+                      <div className="text-sm font-medium">Trader</div>
                       <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {formatAddress(trade.trader)}
+                        {trade.trader}
                       </div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-semibold">{formatEth(trade.amount.toString(), 2)}</div>
+                    <div className="text-sm font-semibold">{Number(trade.amount.toString()) / 1e18} {trade.side} Tokens</div>
                     <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                      {formatEth(trade.cost.toString(), 4)}
+                      {formatEth(BigInt(trade.cost.toString()), 4)}
                     </div>
                   </div>
                 </div>
@@ -807,6 +890,7 @@ export default function MarketDetailClient({ market }: Props) {
           onCancel={() => {
             setShowConfirmModal(false);
             setPendingUnsignedQuote(null);
+            setPendingSignedQuote(null);
             setSigningError(null);
           }}
           isPending={isSigningQuote || isWriting}

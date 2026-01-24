@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { notFound } from "next/navigation";
 import NavBar from "@/components/NavBar";
 import MarketDetailClient from "@/components/MarketDetailClient";
-import { Decimal } from "@prisma/client/runtime/library";
+//import { Decimal } from "@prisma/client/runtime/library";
 
 async function getMarket(id: string) {
   try {
@@ -30,8 +30,8 @@ async function getMarket(id: string) {
         ...trade,
         //priceYes: trade.priceYes.toString(),
         //priceNo: trade.priceNo.toString(),
-        amount: Decimal(trade.amount),
-        cost: Decimal(trade.cost),
+        amount: trade.amount.toString(),
+        cost: trade.cost.toString(),
       })),
     };
   } catch {
