@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import CreatorNavLink from "./CreatorNavLink";
 import AdminOnlyNavLink from "./AdminOnlyNavLink";
+import Footer from "./Footer";
 
 type Props = {
   children: React.ReactNode;
@@ -108,6 +109,9 @@ export default function NavBar({ children }: Props) {
       
       {/* Main Content */}
       <main className="mx-auto max-w-6xl px-3 py-8 sm:px-0">{children}</main>
+
+      {/* Footer */}
+      <Footer />
     </div>
   );
 }
