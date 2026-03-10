@@ -104,14 +104,14 @@ export default function MarketDetailClient({ market }: Props) {
   const marketInfoQuery = useMarketInfo(marketAddress);
 
 
-const tokens = useMemo(() => {
-  if (!marketInfoQuery.data) return null;
+  const tokens = useMemo(() => {
+    if (!marketInfoQuery.data) return null;
 
-  return {
-    yes: marketInfoQuery.data[2] as `0x${string}`,
-    no: marketInfoQuery.data[3] as `0x${string}`,
-  };
-}, [marketInfoQuery.data]);
+    return {
+      yes: marketInfoQuery.data[2] as `0x${string}`,
+      no: marketInfoQuery.data[3] as `0x${string}`,
+    };
+  }, [marketInfoQuery.data]);
 
 
   // const yesToken = tokens?.yes;
@@ -119,36 +119,36 @@ const tokens = useMemo(() => {
   const endTime = marketInfoQuery.data?.[1];
 
   // Get market probabilities with proper hook usage
-const hasTokens = !!tokens?.yes && !!tokens?.no;
+  const hasTokens = !!tokens?.yes && !!tokens?.no;
 
-const probabilitiesQuery = useMarketProbabilities(
-  hasTokens ? marketAddress : undefined,
-  tokens?.yes,
-  tokens?.no
-);
+  const probabilitiesQuery = useMarketProbabilities(
+    hasTokens ? marketAddress : undefined,
+    tokens?.yes,
+    tokens?.no
+  );
 
 
-const probabilities = probabilitiesQuery.data;
-const yesSupply = probabilitiesQuery.yesSupply;
-const noSupply = probabilitiesQuery.noSupply;
+  const probabilities = probabilitiesQuery.data;
+  const yesSupply = probabilitiesQuery.yesSupply;
+  const noSupply = probabilitiesQuery.noSupply;
 
   console.log("Market Probabilities Data (component):", probabilities);
 
   // Get user positions with proper hook usage
-const positionsQuery = useUserPositions(
-  hasTokens ? address : undefined,
-  tokens?.yes,
-  tokens?.no
-);
+  const positionsQuery = useUserPositions(
+    hasTokens ? address : undefined,
+    tokens?.yes,
+    tokens?.no
+  );
 
 
-const yesBalance = positionsQuery ? positionsQuery.yesBalance : 0n;
-const noBalance = positionsQuery ? positionsQuery.noBalance : 0n;
+  const yesBalance = positionsQuery ? positionsQuery.yesBalance : 0n;
+  const noBalance = positionsQuery ? positionsQuery.noBalance : 0n;
 
   // Get ETH balance with proper hook usage
-  const { 
-    balance: ethBalance, 
-    refetch: refetchEthBalance 
+  const {
+    balance: ethBalance,
+    refetch: refetchEthBalance
   } = useEthBalance(address);
 
   // Calculate display probabilities - use hook data if available, otherwise fallback to market data
@@ -263,36 +263,36 @@ const noBalance = positionsQuery ? positionsQuery.noBalance : 0n;
   };
 
   // Invalidate React Query cache and refetch data
-const invalidateAndRefreshData = async () => {
-  try {
-    await queryClient.invalidateQueries({ queryKey: ["portfolio", address] });
-    await queryClient.invalidateQueries({ queryKey: ["portfolio-stats", address] });
+  const invalidateAndRefreshData = async () => {
+    try {
+      await queryClient.invalidateQueries({ queryKey: ["portfolio", address] });
+      await queryClient.invalidateQueries({ queryKey: ["portfolio-stats", address] });
 
-    await Promise.all([
-      marketInfoQuery.refetch(),
-      probabilitiesQuery.refetch(),
-      positionsQuery.refetch(),
-      refetchEthBalance(),
-    ]);
+      await Promise.all([
+        marketInfoQuery.refetch(),
+        probabilitiesQuery.refetch(),
+        positionsQuery.refetch(),
+        refetchEthBalance(),
+      ]);
 
-  
-    await queryClient.invalidateQueries({
-      predicate: (query) =>
-        Array.isArray(query.queryKey) &&
-        query.queryKey.some(
-          (k) =>
-            typeof k === "object" &&
-            k !== null &&
-            "functionName" in k &&
-            (k.functionName === "balanceOf" || k.functionName === "totalSupply")
-        ),
-    });
 
-    console.log("Data refresh completed");
-  } catch (error) {
-    console.error("Error refreshing data:", error);
-  }
-};
+      await queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          query.queryKey.some(
+            (k) =>
+              typeof k === "object" &&
+              k !== null &&
+              "functionName" in k &&
+              (k.functionName === "balanceOf" || k.functionName === "totalSupply")
+          ),
+      });
+
+      console.log("Data refresh completed");
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+    }
+  };
 
   // Calculate max buyable / sellable
   const calculateMaxAmount = (): string => {
@@ -484,7 +484,7 @@ const invalidateAndRefreshData = async () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Volume</div>
-              <div className="text-sm font-semibold">{formatEth(market.collateral, 2)}</div>
+              <div className="text-sm font-semibold">{formatEth(BigInt(market.collateral), 4)}</div>
             </div>
             {endTime && (
               <div>
@@ -493,7 +493,7 @@ const invalidateAndRefreshData = async () => {
                   Ends
                 </div>
                 <div className="text-sm font-semibold">
-                  {formatTimeRemaining(Number(endTime) * 1000)}
+                  {market.endTime? formatTimeRemaining(typeof market.endTime === "bigint" ? Number(market.endTime) : market.endTime): "N/A"}
                 </div>
               </div>
             )}
@@ -588,13 +588,13 @@ const invalidateAndRefreshData = async () => {
                   <div>
                     <div className="text-blue-700 dark:text-blue-300 mb-1">YES Tokens</div>
                     <div className="font-semibold text-blue-900 dark:text-blue-100">
-                      {formatUnits(yesSupply, 18)}
+                      {formatUnits(yesBalance, 18)}
                     </div>
                   </div>
                   <div>
                     <div className="text-blue-700 dark:text-blue-300 mb-1">NO Tokens</div>
                     <div className="font-semibold text-blue-900 dark:text-blue-100">
-                      {formatUnits(noSupply, 18)}
+                      {formatUnits(noBalance, 18)}
                     </div>
                   </div>
                 </div>
@@ -661,7 +661,7 @@ const invalidateAndRefreshData = async () => {
               </div>
               {isSell && selectedBalance > 0n && (
                 <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  Available: {formatEth(selectedBalance, 4)}
+                  Available: {formatUnits(selectedBalance, 18)} {side} tokens
                 </div>
               )}
             </div>
@@ -750,10 +750,10 @@ const invalidateAndRefreshData = async () => {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={`rounded-lg border-2 p-4 space-y-3 ${txStatus === "pending"
-                    ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20"
-                    : txStatus === "confirmed"
-                      ? "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20"
-                      : "border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20"
+                  ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20"
+                  : txStatus === "confirmed"
+                    ? "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20"
+                    : "border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20"
                   }`}
               >
                 <div className="flex items-center gap-3">
@@ -768,20 +768,20 @@ const invalidateAndRefreshData = async () => {
                   )}
                   <div className="flex-1">
                     <div className={`font-semibold text-sm ${txStatus === "pending"
-                        ? "text-blue-900 dark:text-blue-100"
-                        : txStatus === "confirmed"
-                          ? "text-green-900 dark:text-green-100"
-                          : "text-red-900 dark:text-red-100"
+                      ? "text-blue-900 dark:text-blue-100"
+                      : txStatus === "confirmed"
+                        ? "text-green-900 dark:text-green-100"
+                        : "text-red-900 dark:text-red-100"
                       }`}>
                       {txStatus === "pending" && "Transaction Pending..."}
                       {txStatus === "confirmed" && "Trade Executed Successfully! ✓"}
                       {txStatus === "failed" && "Transaction Failed"}
                     </div>
                     <div className={`text-xs mt-1 ${txStatus === "pending"
-                        ? "text-blue-700 dark:text-blue-300"
-                        : txStatus === "confirmed"
-                          ? "text-green-700 dark:text-green-300"
-                          : "text-red-700 dark:text-red-300"
+                      ? "text-blue-700 dark:text-blue-300"
+                      : txStatus === "confirmed"
+                        ? "text-green-700 dark:text-green-300"
+                        : "text-red-700 dark:text-red-300"
                       }`}>
                       Hash: <span className="font-mono break-all">{txHash.slice(0, 10)}...{txHash.slice(-8)}</span>
                     </div>
