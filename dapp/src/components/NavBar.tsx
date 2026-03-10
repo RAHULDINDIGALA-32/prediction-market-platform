@@ -108,7 +108,7 @@ export default function NavBar({ children }: Props) {
       </header>
       
       {/* Main Content */}
-      <main className="mx-auto max-w-6xl px-3 py-8 sm:px-0">{children}</main>
+      <main className="mx-auto max-w-6xl px-3 py-8 sm:px-0 mb-20">{children}</main>
 
       {/* Footer */}
       <Footer />

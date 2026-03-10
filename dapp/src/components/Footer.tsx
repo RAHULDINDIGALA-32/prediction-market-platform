@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Github, ExternalLink, Zap } from "lucide-react";
@@ -41,12 +40,7 @@ const footerSections: FooterSection[] = [
       },
       {
         label: "Smart Contracts",
-        href: "https://github.com/RAHULDINDIGALA-32/0x01-markets/tree/main/foundry",
-        external: true,
-      },
-      {
-        label: "API Reference",
-        href: "https://github.com/RAHULDINDIGALA-32/0x01-markets/issues",
+        href: "https://github.com/RAHULDINDIGALA-32/0x01-markets/tree/main/foundry/src",
         external: true,
       },
     ],
@@ -95,24 +89,26 @@ export default function Footer() {
           {/* Brand Section */}
           <div className="space-y-4">
             <div>
+              <Link href="/" className="flex items-center gap-2">
               <div className="flex items-center gap-2">
-                <div className="rounded-lg bg-gradient-to-br from-zinc-900 to-zinc-700 p-2 dark:from-zinc-50 dark:to-zinc-300">
-                  <div className="relative h-11 w-11">
-                                  <Image
-                                    src="/logo.png"
-                                    alt="0x01 Markets Logo"
-                                    fill
-                                    className="rounded-full object-contain"
-                                    priority
-                                  />
-                                </div>
+                <div className="rounded-lg">
+                  <div className="relative h-9 w-9">
+                    <Image
+                      src="/logo.png"
+                      alt="0x01 Markets Logo"
+                      fill
+                      className="rounded-full object-contain"
+                      priority
+                    />
+                  </div>
                 </div>
-                <h3 className="font-mono text-sm font-semibold tracking-tight">
+                <h3 className="font-mono text-lg font-semibold tracking-tight">
                   0x01 Markets
                 </h3>
               </div>
+              </Link>
             </div>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+            <p className="text-xs text-zinc-400 dark:text-zinc-300">
               On-chain binary prediction markets with optimistic oracle.
             </p>
             <div className="flex gap-3">
@@ -148,7 +144,7 @@ export default function Footer() {
                       href={link.href}
                       target={link.external ? "_blank" : undefined}
                       rel={link.external ? "noopener noreferrer" : undefined}
-                      className="inline-flex items-center gap-1 text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors"
+                      className="inline-flex items-center gap-1 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors"
                     >
                       {link.label}
                       {link.external && (
@@ -169,45 +165,25 @@ export default function Footer() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           {/* Copyright & Status */}
           <div className="space-y-2">
-            <p className="text-xs text-zinc-600 dark:text-zinc-400">
-              © 2026 0x01 Markets. Built with{" "}
-              <span className="inline-flex items-center gap-1">
-                <Zap className="h-3 w-3" /> precision engineering.
-              </span>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              © 2025 0x01 Markets. All rights reserved.
             </p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-500">
-              Made by{" "}
+            <p className="text-sm text-zinc-300 dark:text-zinc-400">
+              Built by{" "}
               <a
                 href="https://github.com/RAHULDINDIGALA-32"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
               >
-                Rahul Dindigala
+                Rahul Dindigala (Web3 Developer)
               </a>
             </p>
           </div>
 
-          {/* Tech Stack Badge */}
-          <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/50">
-            <div className="flex items-center gap-1">
-              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                Production Grade
-              </span>
-            </div>
-          </div>
+
         </div>
 
-        {/* Developer Info */}
-        <div className="mt-8 rounded-lg border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-900/30">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-zinc-900 dark:text-zinc-50">
-            Developer
-          </p>
-          <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-            This platform is a production-ready smart contract application demonstrating advanced on-chain binary markets with optimistic oracle mechanics. All code is open-source and available on GitHub.
-          </p>
-        </div>
       </div>
     </footer>
   );
