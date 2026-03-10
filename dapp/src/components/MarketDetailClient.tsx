@@ -18,6 +18,7 @@ import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
 import { AlertTriangle, Clock, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle, Loader } from "lucide-react";
 import TradeConfirmationModal from "@/components/TradeConfirmationModal";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { formatUnits } from "ethers";
 
 const MARKET_ABI = [
   {
@@ -100,7 +101,8 @@ export default function MarketDetailClient({ market }: Props) {
   const [isRecordingTrade, setIsRecordingTrade] = useState(false);
 
   const marketAddress = market.contractAddress as `0x${string}` || market.id as `0x${string}`;
-const marketInfoQuery = useMarketInfo(marketAddress);
+  const marketInfoQuery = useMarketInfo(marketAddress);
+
 
 const tokens = useMemo(() => {
   if (!marketInfoQuery.data) return null;
@@ -125,6 +127,7 @@ const probabilitiesQuery = useMarketProbabilities(
   tokens?.no
 );
 
+
 const probabilities = probabilitiesQuery.data;
 const yesSupply = probabilitiesQuery.yesSupply;
 const noSupply = probabilitiesQuery.noSupply;
@@ -137,6 +140,7 @@ const positionsQuery = useUserPositions(
   tokens?.yes,
   tokens?.no
 );
+
 
 const yesBalance = positionsQuery ? positionsQuery.yesBalance : 0n;
 const noBalance = positionsQuery ? positionsQuery.noBalance : 0n;
@@ -259,28 +263,36 @@ const noBalance = positionsQuery ? positionsQuery.noBalance : 0n;
   };
 
   // Invalidate React Query cache and refetch data
-  const invalidateAndRefreshData = async () => {
-    try {
-      await queryClient.invalidateQueries({ queryKey: ["portfolio", address] });
-      await queryClient.invalidateQueries({ queryKey: ["portfolio-stats", address] });
+const invalidateAndRefreshData = async () => {
+  try {
+    await queryClient.invalidateQueries({ queryKey: ["portfolio", address] });
+    await queryClient.invalidateQueries({ queryKey: ["portfolio-stats", address] });
 
-      await Promise.all([
-        marketInfoQuery.refetch,
-        probabilitiesQuery.refetch,
-        positionsQuery.refetch,
-        refetchEthBalance(),
-      ]);
+    await Promise.all([
+      marketInfoQuery.refetch(),
+      probabilitiesQuery.refetch(),
+      positionsQuery.refetch(),
+      refetchEthBalance(),
+    ]);
 
-      await queryClient.invalidateQueries({ 
-        queryKey: ["readContracts"],
-        exact: false,
-      });
+  
+    await queryClient.invalidateQueries({
+      predicate: (query) =>
+        Array.isArray(query.queryKey) &&
+        query.queryKey.some(
+          (k) =>
+            typeof k === "object" &&
+            k !== null &&
+            "functionName" in k &&
+            (k.functionName === "balanceOf" || k.functionName === "totalSupply")
+        ),
+    });
 
-      console.log("Data refresh completed");
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-    }
-  };
+    console.log("Data refresh completed");
+  } catch (error) {
+    console.error("Error refreshing data:", error);
+  }
+};
 
   // Calculate max buyable / sellable
   const calculateMaxAmount = (): string => {
@@ -538,11 +550,11 @@ const noBalance = positionsQuery ? positionsQuery.noBalance : 0n;
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <div className="text-zinc-500 dark:text-zinc-400 mb-1">YES Supply</div>
-                    <div className="font-semibold">{yesSupply.toString()}</div>
+                    <div className="font-semibold">{formatUnits(yesSupply, 18)}</div>
                   </div>
                   <div>
                     <div className="text-zinc-500 dark:text-zinc-400 mb-1">NO Supply</div>
-                    <div className="font-semibold">{noSupply.toString()}</div>
+                    <div className="font-semibold">{formatUnits(noSupply, 18)}</div>
                   </div>
                 </div>
               </div>
@@ -576,13 +588,13 @@ const noBalance = positionsQuery ? positionsQuery.noBalance : 0n;
                   <div>
                     <div className="text-blue-700 dark:text-blue-300 mb-1">YES Tokens</div>
                     <div className="font-semibold text-blue-900 dark:text-blue-100">
-                      {formatEth(yesBalance, 2)}
+                      {formatUnits(yesSupply, 18)}
                     </div>
                   </div>
                   <div>
                     <div className="text-blue-700 dark:text-blue-300 mb-1">NO Tokens</div>
                     <div className="font-semibold text-blue-900 dark:text-blue-100">
-                      {formatEth(noBalance, 2)}
+                      {formatUnits(noSupply, 18)}
                     </div>
                   </div>
                 </div>
@@ -782,7 +794,7 @@ const noBalance = positionsQuery ? positionsQuery.noBalance : 0n;
                 )}
                 {txStatus === "confirmed" && (
                   <div className="text-xs text-green-700 dark:text-green-300 space-y-1">
-                    <p>• {formatEth(BigInt(pendingUnsignedQuote?.quote?.amount || "0"), 4)} {side} tokens received</p>
+                    <p>• {formatUnits(pendingUnsignedQuote?.quote?.amount || 0, 18)} {side} tokens received</p>
                     <p>• Market data will update shortly</p>
                   </div>
                 )}

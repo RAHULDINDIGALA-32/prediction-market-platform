@@ -30,7 +30,7 @@ const MARKET_ABI = [
       { name: "yesToken_", type: "address" },
       { name: "noToken_", type: "address" },
       { name: "vault_", type: "address" },
-      { name: "isExpired_", type: "bool" },
+      { name: "lmsrB_", type: "uint256" },
       { name: "isClosed_", type: "bool" },
     ],
   },
