@@ -14,7 +14,7 @@ import { useMarketInfo, useMarketProbabilities, useUserPositions, useEthBalance 
 import { useUnsignedQuote, signQuote, UnsignedQuote } from "@/hooks/useQuote";
 import { calculateProbability, formatEth, formatTimeRemaining, formatAddress } from "@/lib/utils";
 import { parseContractError } from "@/lib/errors";
-//import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
+import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
 import { AlertTriangle, Clock, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle, Loader } from "lucide-react";
 import TradeConfirmationModal from "@/components/TradeConfirmationModal";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
@@ -189,22 +189,25 @@ export default function MarketDetailClient({ market }: Props) {
   useEffect(() => {
     if (isSuccess && txReceipt && !isRecordingTrade) {
       setTxStatus("confirmed");
-      setTxBlockNumber(Number(txReceipt.blockNumber));
-      recordTradeToDatabase();
+      const blockNumber = Number(txReceipt.blockNumber);
+      setTxBlockNumber(blockNumber);
+      recordTradeToDatabase(blockNumber);
     } else if (isError) {
       setTxStatus("failed");
     }
   }, [isSuccess, isError, txReceipt, isRecordingTrade]);
 
   // Record trade to database after on-chain confirmation
-  const recordTradeToDatabase = async () => {
-    if (!txHash || !pendingSignedQuote || !address || txBlockNumber === null) {
-      console.error("Missing required data to record trade", {
-        txHash,
-        hasPendingSignedQuote: !!pendingSignedQuote,
-        address,
-        txBlockNumber,
-      });
+  const recordTradeToDatabase = async (blockNumber: number) => {
+    if (!txHash || !pendingSignedQuote || !address || blockNumber === null) {
+      const missingData = {
+        txHash: !txHash,
+        hasPendingSignedQuote: !pendingSignedQuote,
+        address: !address,
+        blockNumber: blockNumber === null,
+      };
+      console.error("Missing required data to record trade", missingData);
+      setSigningError("Missing transaction or quote data. Please try again.");
       return;
     }
 
@@ -213,7 +216,7 @@ export default function MarketDetailClient({ market }: Props) {
 
       const dbPayload = {
         txHash,
-        txBlockNumber,
+        txBlockNumber: blockNumber,
         marketId: market.id,
         trader: address,
         outcome: (pendingSignedQuote.quote.outcome - 1) as 0 | 1,
@@ -225,6 +228,7 @@ export default function MarketDetailClient({ market }: Props) {
         signature: pendingSignedQuote.signature,
       };
 
+      console.log("Recording trade to database with payload:", dbPayload);
 
       const response = await fetch("/api/trades/execute", {
         method: "POST",
@@ -233,13 +237,51 @@ export default function MarketDetailClient({ market }: Props) {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to record trade");
+        const errorJson = await response.json();
+        const errorMsg = errorJson.error || `HTTP ${response.status}`;
+        console.error("Trade recording API error:", {
+          status: response.status,
+          error: errorMsg,
+          details: errorJson,
+        });
+        throw new Error(errorMsg);
       }
 
-      //const result = await response.json();
+      const result = await response.json();
+      console.log("Trade recorded successfully:", result);
 
-      await invalidateAndRefreshData();
+      // Use returned data for optimistic update
+      if (result.success && result.data) {
+        // Immediately update React Query cache with fresh data from server
+        // This prevents lag and ensures consistency
+        queryClient.setQueryData(
+          ["market", market.id],
+          (oldData: typeof market | undefined) => {
+            if (!oldData) return oldData;
+            return {
+              ...oldData,
+              qYes: result.data.market.qYes,
+              qNo: result.data.market.qNo,
+              collateral: result.data.market.collateral,
+              version: result.data.market.version,
+              trades: [
+                {
+                  id: result.data.trade.id,
+                  side: result.data.trade.side,
+                  amount: result.data.trade.amount,
+                  cost: result.data.trade.cost,
+                  trader: result.data.trade.trader,
+                  createdAt: new Date(result.data.trade.createdAt),
+                },
+                ...oldData.trades,
+              ],
+            };
+          }
+        );
+
+        // Refetch in background for data consistency
+        await invalidateAndRefreshData();
+      }
 
       setTimeout(() => {
         setShowConfirmModal(false);
@@ -251,8 +293,13 @@ export default function MarketDetailClient({ market }: Props) {
         setTxBlockNumber(null);
       }, 2000);
     } catch (error) {
-      console.error("Error recording trade to database:", error);
-      setSigningError(`Database error: ${error instanceof Error ? error.message : "Unknown error"}`);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error("Error recording trade to database:", {
+        error,
+        errorMessage,
+        errorStack: error instanceof Error ? error.stack : undefined,
+      });
+      setSigningError(`Database error: ${errorMessage}`);
     } finally {
       setIsRecordingTrade(false);
     }
@@ -373,24 +420,24 @@ export default function MarketDetailClient({ market }: Props) {
         throw new Error("Value mismatch: ETH amount must exactly match quote cost");
       }
 
-      // // Debug simulation before sending transaction
-      // try {
-      //   const recoveredSigner = recoverSigner(quoteStruct, signedQuote.signature as `0x${string}`);
-      //   console.log("Recovered signer:", recoveredSigner);
+      // Debug simulation before sending transaction
+      try {
+        const recoveredSigner = recoverSigner(quoteStruct, signedQuote.signature as `0x${string}`);
+        console.log("Recovered signer:", recoveredSigner);
 
-      //   await simulateExecuteTrade(
-      //     signedQuote.quote.market as `0x${string}`,
-      //     quoteStruct,
-      //     signedQuote.signature as `0x${string}`,
-      //     BigInt(signedQuote.quote.minAmountOut ?? 0),
-      //     BigInt(signedQuote.quote.minReturn ?? 0),
-      //     value
-      //   );
-      //   console.log("Debug simulation passed");
-      // } catch (simError) {
-      //   console.error("Debug simulation failed:", simError);
-      // }
-      //
+        await simulateExecuteTrade(
+          signedQuote.quote.market as `0x${string}`,
+          quoteStruct,
+          signedQuote.signature as `0x${string}`,
+          BigInt(signedQuote.quote.minAmountOut ?? 0),
+          BigInt(signedQuote.quote.minReturn ?? 0),
+          value
+        );
+        console.log("Debug simulation passed");
+      } catch (simError) {
+        console.error("Debug simulation failed:", simError);
+      }
+      
 
       setShowConfirmModal(false);
       setTxStatus("pending");

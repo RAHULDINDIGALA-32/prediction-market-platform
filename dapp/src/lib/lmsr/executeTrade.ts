@@ -36,6 +36,8 @@ export async function executeTrade({
     expectedVersion,
     trader,
     isSell = false,
+    transactionHash,
+    blockNumber,
 } : {
     marketId: string;
     side: "YES" | "NO";
@@ -44,6 +46,8 @@ export async function executeTrade({
     expectedVersion: number;
     trader: string;
     isSell?: boolean;
+    transactionHash: string;
+    blockNumber: bigint;
 }) {
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const market = await tx.market.findUnique({
@@ -83,7 +87,7 @@ export async function executeTrade({
             },
         });
 
-        await tx.trade.create({
+        const trade = await tx.trade.create({
             data: {
                 marketId,
                 side,
@@ -91,9 +95,24 @@ export async function executeTrade({
                 cost: new Decimal(cost.toString()),
                 trader,
                 marketVer: market.version,
+                transactionHash,
+                blockNumber,
             },
         });
 
-        return { cost };
+        // Fetch updated market state for response
+        const updatedMarket = await tx.market.findUnique({
+            where: { id: marketId },
+            select: {
+                id: true,
+                qYes: true,
+                qNo: true,
+                collateral: true,
+                version: true,
+                updatedAt: true,
+            },
+        });
+
+        return { cost, trade, market: updatedMarket };
     });
 }

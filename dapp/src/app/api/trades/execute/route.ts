@@ -28,9 +28,30 @@ interface TradeExecutionRequest {
 
 interface TradeExecutionResponse {
   success: boolean;
-  txHash?: string;
-  error?: string;
   message?: string;
+  error?: string;
+  data?: {
+    trade: {
+      id: string;
+      marketId: string;
+      side: string;
+      amount: string;
+      cost: string;
+      trader: string;
+      transactionHash: string;
+      blockNumber: string;
+      createdAt: string;
+    };
+    market?: {
+      id: string;
+      qYes: string;
+      qNo: string;
+      collateral: string;
+      version: number;
+      updatedAt: string;
+    };
+    txHash: string;
+  };
 }
 
 /**
@@ -196,7 +217,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
     // Execute trade in database (only after on-chain confirmation)
     // Market state is updated atomically
     try {
-      await executeTrade({
+      const result = await executeTrade({
         marketId,
         side: outcome === 0 ? 'YES' : 'NO',
         amount: new Decimal(amountBigInt.toString()),
@@ -204,26 +225,25 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
         expectedVersion: marketVersion,
         trader,
         isSell,
+        transactionHash: txHash,
+        blockNumber: BigInt(txBlockNumber),
       });
 
       // Mark signed quote as committed
+      const quoteHash = ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ['address', 'address', 'uint8', 'uint256', 'uint256', 'uint256', 'uint256', 'bool', 'uint256', 'uint256'],
+          [trader, market.id, outcome, amountBigInt, costBigInt, 0, nonceBigInt, isSell, 0, 0]
+        )
+      );
+
       await prisma.signedQuote.upsert({
-        where: { quoteHash: ethers.keccak256(
-          ethers.AbiCoder.defaultAbiCoder().encode(
-            ['address', 'address', 'uint8', 'uint256', 'uint256', 'uint256', 'uint256', 'bool', 'uint256', 'uint256'],
-            [trader, market.id, outcome, amountBigInt, costBigInt, 0, nonceBigInt, isSell, 0, 0]
-          )
-        ) },
+        where: { quoteHash },
         update: { status: 'COMMITTED' },
         create: {
           trader,
           marketId,
-          quoteHash: ethers.keccak256(
-            ethers.AbiCoder.defaultAbiCoder().encode(
-              ['address', 'address', 'uint8', 'uint256', 'uint256', 'uint256', 'uint256', 'bool', 'uint256', 'uint256'],
-              [trader, market.id, outcome, amountBigInt, costBigInt, 0, nonceBigInt, isSell, 0, 0]
-            )
-          ),
+          quoteHash,
           signature,
           amount: new Decimal(amountBigInt.toString()),
           cost: new Decimal(costBigInt.toString()),
@@ -245,10 +265,32 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
         {
           success: true,
           message: 'Trade executed successfully',
-          txHash,
+          data: {
+            trade: {
+              id: result.trade.id,
+              marketId: result.trade.marketId,
+              side: result.trade.side,
+              amount: result.trade.amount.toString(),
+              cost: result.trade.cost.toString(),
+              trader: result.trade.trader,
+              transactionHash: result.trade.transactionHash,
+              blockNumber: result.trade.blockNumber.toString(),
+              createdAt: result.trade.createdAt.toISOString(),
+            },
+            market: result.market ? {
+              id: result.market.id,
+              qYes: result.market.qYes.toString(),
+              qNo: result.market.qNo.toString(),
+              collateral: result.market.collateral.toString(),
+              version: result.market.version,
+              updatedAt: result.market.updatedAt.toISOString(),
+            } : null,
+            txHash,
+          },
         },
         { status: 201 }
       );
+
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Trade execution failed";
       return NextResponse.json(
