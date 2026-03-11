@@ -14,7 +14,7 @@ import { useMarketInfo, useMarketProbabilities, useUserPositions, useEthBalance 
 import { useUnsignedQuote, signQuote, UnsignedQuote } from "@/hooks/useQuote";
 import { calculateProbability, formatEth, formatTimeRemaining, formatAddress } from "@/lib/utils";
 import { parseContractError } from "@/lib/errors";
-import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
+//import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
 import { AlertTriangle, Clock, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle, Loader } from "lucide-react";
 import TradeConfirmationModal from "@/components/TradeConfirmationModal";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
@@ -236,18 +236,54 @@ export default function MarketDetailClient({ market }: Props) {
         body: JSON.stringify(dbPayload),
       });
 
-      if (!response.ok) {
-        const errorJson = await response.json();
-        const errorMsg = errorJson.error || `HTTP ${response.status}`;
+      // Check response validity
+      if (!response || !response.ok) {
+        const status = response?.status || 'unknown';
+        const statusText = response?.statusText || 'No response';
+        let errorMsg = `HTTP ${status}: ${statusText}`;
+        let errorDetails = null;
+
+        // Try to parse error response
+        if (response) {
+          try {
+            const contentType = response.headers.get('content-type');
+            if (contentType?.includes('application/json')) {
+              errorDetails = await response.json();
+              errorMsg = errorDetails?.error || errorMsg;
+            } else {
+              const responseText = await response.text();
+              console.warn("Non-JSON response from API:", responseText.substring(0, 500));
+              if (responseText) {
+                errorMsg = `${errorMsg} - ${responseText.substring(0, 200)}`;
+              }
+            }
+          } catch (parseErr) {
+            console.warn("Could not parse error response:", parseErr);
+          }
+        }
+
         console.error("Trade recording API error:", {
-          status: response.status,
+          status,
+          statusText,
           error: errorMsg,
-          details: errorJson,
+          details: errorDetails,
         });
         throw new Error(errorMsg);
       }
 
-      const result = await response.json();
+      // Parse successful response
+      let result;
+      try {
+        result = await response.json();
+      } catch (parseErr) {
+        console.error("Failed to parse success response as JSON:", parseErr);
+        throw new Error("Invalid API response format");
+      }
+
+      if (!result.success) {
+        throw new Error(result.error || 'Trade execution failed');
+      }
+
       console.log("Trade recorded successfully:", result);
 
       // Use returned data for optimistic update
@@ -293,11 +329,12 @@ export default function MarketDetailClient({ market }: Props) {
         setTxBlockNumber(null);
       }, 2000);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error ? error.message : String(error);
       console.error("Error recording trade to database:", {
-        error,
         errorMessage,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
         errorStack: error instanceof Error ? error.stack : undefined,
+        rawError: error,
       });
       setSigningError(`Database error: ${errorMessage}`);
     } finally {
@@ -421,22 +458,22 @@ export default function MarketDetailClient({ market }: Props) {
       }
 
       // Debug simulation before sending transaction
-      try {
-        const recoveredSigner = recoverSigner(quoteStruct, signedQuote.signature as `0x${string}`);
-        console.log("Recovered signer:", recoveredSigner);
+      // try {
+      //   const recoveredSigner = recoverSigner(quoteStruct, signedQuote.signature as `0x${string}`);
+      //   console.log("Recovered signer:", recoveredSigner);
 
-        await simulateExecuteTrade(
-          signedQuote.quote.market as `0x${string}`,
-          quoteStruct,
-          signedQuote.signature as `0x${string}`,
-          BigInt(signedQuote.quote.minAmountOut ?? 0),
-          BigInt(signedQuote.quote.minReturn ?? 0),
-          value
-        );
-        console.log("Debug simulation passed");
-      } catch (simError) {
-        console.error("Debug simulation failed:", simError);
-      }
+      //   await simulateExecuteTrade(
+      //     signedQuote.quote.market as `0x${string}`,
+      //     quoteStruct,
+      //     signedQuote.signature as `0x${string}`,
+      //     BigInt(signedQuote.quote.minAmountOut ?? 0),
+      //     BigInt(signedQuote.quote.minReturn ?? 0),
+      //     value
+      //   );
+      //   console.log("Debug simulation passed");
+      // } catch (simError) {
+      //   console.error("Debug simulation failed:", simError);
+      // }
       
 
       setShowConfirmModal(false);

@@ -29,6 +29,10 @@ export async function POST(req: Request) {
 
   try {
     // Call the server-side executeTrade to apply DB changes atomically
+    // For reconciliation, use placeholder txHash and blockNumber (actual on-chain values)
+    const txHash = body.txHash || `reconcile-${quoteHash}`;
+    const blockNumber = body.blockNumber || 0n;
+
     await executeTrade({
       marketId,
       side: outcome === 0 ? 'YES' : 'NO',
@@ -37,6 +41,8 @@ export async function POST(req: Request) {
       expectedVersion: marketVersion,
       trader,
       isSell: Boolean(isSell),
+      transactionHash: txHash,
+      blockNumber: BigInt(blockNumber),
     });
 
 
