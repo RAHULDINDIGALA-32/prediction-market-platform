@@ -32,7 +32,6 @@ interface CreatorStats {
 export async function GET(req: NextRequest) {
   const address = req.nextUrl.searchParams.get("address");
 
-  console.log("[portfolio/stats] Fetching stats for address:", address);
 
   if (!address) {
     return NextResponse.json(
@@ -72,8 +71,6 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    console.log(`[portfolio/stats] Found ${trades.length} trades for trader ${normalizedAddress}`);
-    console.log("[portfolio/stats] trades:", trades);
 
     if (trades.length > 0) {
       traderStats.tradeCount = trades.length;

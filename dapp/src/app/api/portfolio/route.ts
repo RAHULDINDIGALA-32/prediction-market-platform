@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
   try {
     const normalizedAddress = address.toLowerCase();
 
+
     // Fetch trader positions: Get markets where user has trades
     // Shows all market statuses (OPEN, CLOSED, RESOLVED, SETTLED)
     const traderTrades = await prisma.trade.findMany({
@@ -38,6 +39,7 @@ export async function GET(req: NextRequest) {
     });
 
     const traderMarketIds = traderTrades.map((t) => t.marketId);
+
 
     const traderMarkets: MarketWithRelations[] = [];
     if (traderMarketIds.length > 0) {
@@ -89,9 +91,12 @@ export async function GET(req: NextRequest) {
       );
     };
 
+    const serializedTrader = serializeData(traderMarkets);
+    const serializedCreator = serializeData(creatorMarkets);
+
     return NextResponse.json({
-      trader: serializeData(traderMarkets),
-      creator: serializeData(creatorMarkets),
+      trader: serializedTrader,
+      creator: serializedCreator,
     });
   } catch (error) {
     console.error("Portfolio fetch error:", error);

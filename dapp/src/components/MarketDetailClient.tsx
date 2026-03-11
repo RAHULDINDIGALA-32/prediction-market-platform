@@ -14,7 +14,7 @@ import { useMarketInfo, useMarketProbabilities, useUserPositions, useEthBalance 
 import { useUnsignedQuote, signQuote, UnsignedQuote } from "@/hooks/useQuote";
 import { calculateProbability, formatEth, formatTimeRemaining, formatAddress } from "@/lib/utils";
 import { parseContractError } from "@/lib/errors";
-import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
+//import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
 import { AlertTriangle, Clock, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle, Loader } from "lucide-react";
 import TradeConfirmationModal from "@/components/TradeConfirmationModal";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
@@ -132,8 +132,6 @@ export default function MarketDetailClient({ market }: Props) {
   const yesSupply = probabilitiesQuery.yesSupply;
   const noSupply = probabilitiesQuery.noSupply;
 
-  console.log("Market Probabilities Data (component):", probabilities);
-
   // Get user positions with proper hook usage
   const positionsQuery = useUserPositions(
     hasTokens ? address : undefined,
@@ -227,7 +225,6 @@ export default function MarketDetailClient({ market }: Props) {
         signature: pendingSignedQuote.signature,
       };
 
-      console.log("Recording trade to database:", dbPayload);
 
       const response = await fetch("/api/trades/execute", {
         method: "POST",
@@ -240,8 +237,7 @@ export default function MarketDetailClient({ market }: Props) {
         throw new Error(error.error || "Failed to record trade");
       }
 
-      const result = await response.json();
-      console.log("Trade recorded successfully:", result);
+      //const result = await response.json();
 
       await invalidateAndRefreshData();
 
@@ -288,7 +284,6 @@ export default function MarketDetailClient({ market }: Props) {
           ),
       });
 
-      console.log("Data refresh completed");
     } catch (error) {
       console.error("Error refreshing data:", error);
     }
@@ -371,7 +366,6 @@ export default function MarketDetailClient({ market }: Props) {
         minReturn: BigInt(signedQuote.quote.minReturn ?? 0),
       };
 
-      console.log("Quote struct for contract:", quoteStruct);
 
       const value = signedQuote.quote.isSell ? 0n : BigInt(signedQuote.quote.cost);
 
@@ -379,25 +373,25 @@ export default function MarketDetailClient({ market }: Props) {
         throw new Error("Value mismatch: ETH amount must exactly match quote cost");
       }
 
-      // Debug simulation before sending transaction
-      try {
-        const recoveredSigner = recoverSigner(quoteStruct, signedQuote.signature as `0x${string}`);
-        console.log("Recovered signer:", recoveredSigner);
+      // // Debug simulation before sending transaction
+      // try {
+      //   const recoveredSigner = recoverSigner(quoteStruct, signedQuote.signature as `0x${string}`);
+      //   console.log("Recovered signer:", recoveredSigner);
 
-        await simulateExecuteTrade(
-          signedQuote.quote.market as `0x${string}`,
-          quoteStruct,
-          signedQuote.signature as `0x${string}`,
-          BigInt(signedQuote.quote.minAmountOut ?? 0),
-          BigInt(signedQuote.quote.minReturn ?? 0),
-          value
-        );
-        console.log("✅ Debug simulation passed");
-      } catch (simError) {
-        console.error("🚨 Debug simulation failed:", simError);
-      }
-      // -----
-      
+      //   await simulateExecuteTrade(
+      //     signedQuote.quote.market as `0x${string}`,
+      //     quoteStruct,
+      //     signedQuote.signature as `0x${string}`,
+      //     BigInt(signedQuote.quote.minAmountOut ?? 0),
+      //     BigInt(signedQuote.quote.minReturn ?? 0),
+      //     value
+      //   );
+      //   console.log("Debug simulation passed");
+      // } catch (simError) {
+      //   console.error("Debug simulation failed:", simError);
+      // }
+      //
+
       setShowConfirmModal(false);
       setTxStatus("pending");
 
@@ -415,7 +409,7 @@ export default function MarketDetailClient({ market }: Props) {
         gas: BigInt(5000000),
       });
 
-      console.log("Transaction sent:", txHashResult);
+      // console.log("Transaction sent:", txHashResult);
       setTxHash(txHashResult);
     } catch (error: unknown) {
       console.error("Trade execution failed:", error);

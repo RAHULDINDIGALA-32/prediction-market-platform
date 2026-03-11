@@ -11,7 +11,6 @@ import {
   Loader2, 
   TrendingUp, 
   Percent,
-  BarChart3,
   Award,
   Target,
   Calendar,
@@ -23,6 +22,7 @@ import {
   Clock
 } from "lucide-react";
 import Link from "next/link";
+import { formatUnits } from "ethers";
 
 // Type definitions for portfolio data
 interface TraderPosition {
@@ -103,9 +103,25 @@ const MARKET_ABI = [
 ] as const;
 
 async function getUserPortfolio(address: string): Promise<{ trader: TraderPosition[]; creator: CreatorMarket[] }> {
-  const res = await fetch(`/api/portfolio?address=${address}`);
-  if (!res.ok) return { trader: [], creator: [] };
-  const data = await res.json();
+  try {
+    const res = await fetch(`/api/portfolio?address=${address}`);
+    if (!res.ok) {
+      console.error("[getUserPortfolio] Failed to fetch portfolio:", res.status);
+      return { trader: [], creator: [] };
+    }
+    const data = await res.json();
+
+    const parseResult = {
+      trader: data.trader ? parseTraderMarkets(data.trader) : [],
+      creator: data.creator ? parseCreatorMarkets(data.creator) : [],
+    };
+    
+    return parseResult;
+  } catch (error) {
+    console.error("[getUserPortfolio] Error parsing portfolio data:", error);
+    return { trader: [], creator: [] };
+  }
+}
 
 
 const decimalToBigInt = (val: unknown): bigint => {
@@ -115,40 +131,64 @@ const decimalToBigInt = (val: unknown): bigint => {
 };
 
 const parseTraderMarkets = (markets: Array<Record<string, unknown>>): TraderPosition[] =>
-  markets.map((m) => ({
-    id: String(m.id || ''),
-    contractAddress: m.contractAddress ? String(m.contractAddress) : undefined,
-    title: m.title ? String(m.title) : undefined,
-    category: String(m.category || ''),
-    status: String(m.status || ''),
-    amount: decimalToBigInt(m.amount),        
-    cost: decimalToBigInt(m.cost),          
-    collateral: decimalToBigInt(m.collateral),
-    subsidyAmount: m.subsidyAmount ? decimalToBigInt(m.subsidyAmount) : undefined,
-    endTime: m.endTime ? BigInt(String(m.endTime)) : undefined,
-    qYes: Number(m.qYes || 0),
-    qNo: Number(m.qNo || 0),
-  }));
+  markets.map((m) => {
+    // Handle subsidyAmount - convert decimal to wei
+    let subsidyAmountBigInt: bigint | undefined;
+    if (m.subsidyAmount) {
+      const subsidyVal = typeof m.subsidyAmount === "string" ? parseFloat(m.subsidyAmount) : Number(m.subsidyAmount);
+      subsidyAmountBigInt = BigInt(Math.floor(subsidyVal * 1e18));
+    }
 
-  const parseCreatorMarkets = (markets: Array<Record<string, unknown>>): CreatorMarket[] =>
-    markets.map((m: Record<string, unknown>) => ({
+    return {
       id: String(m.id || ''),
+      contractAddress: m.contractAddress ? String(m.contractAddress) : undefined,
       title: m.title ? String(m.title) : undefined,
       category: String(m.category || ''),
       status: String(m.status || ''),
-      collateral: typeof m.collateral === "string" ? BigInt(m.collateral) : BigInt(m.collateral as number || 0),
-      subsidyAmount: m.subsidyAmount ? (typeof m.subsidyAmount === "string" ? BigInt(m.subsidyAmount) : BigInt(m.subsidyAmount as number)) : undefined,
-      createdAt: String(m.createdAt || ''),
-      endTime: m.endTime ? (typeof m.endTime === "string" ? BigInt(m.endTime) : BigInt(m.endTime as number)) : undefined,
+      amount: decimalToBigInt(m.amount),        
+      cost: decimalToBigInt(m.cost),          
+      collateral: decimalToBigInt(m.collateral),
+      subsidyAmount: subsidyAmountBigInt,
+      endTime: m.endTime ? BigInt(String(m.endTime)) : undefined,
       qYes: Number(m.qYes || 0),
       qNo: Number(m.qNo || 0),
-    }));
+    };
+  });
 
-  return {
-    trader: data.trader ? parseTraderMarkets(data.trader) : [],
-    creator: data.creator ? parseCreatorMarkets(data.creator) : [],
+  const parseCreatorMarkets = (markets: Array<Record<string, unknown>>): CreatorMarket[] => {
+   // console.log("[parseCreatorMarkets] Parsing markets:", markets);
+    const parsed = markets.map((m: Record<string, unknown>) => {
+      try {
+        // Handle subsidyAmount - convert to integer by multiplying by 1e18 if it's decimal
+        let subsidyAmountBigInt: bigint | undefined;
+        if (m.subsidyAmount) {
+          const subsidyVal = typeof m.subsidyAmount === "string" ? parseFloat(m.subsidyAmount) : Number(m.subsidyAmount);
+          // Convert to wei (multiply by 1e18)
+          subsidyAmountBigInt = BigInt(Math.floor(subsidyVal * 1e18));
+        }
+
+        return {
+          id: String(m.id || ''),
+          title: m.title ? String(m.title) : undefined,
+          category: String(m.category || ''),
+          status: String(m.status || ''),
+          collateral: typeof m.collateral === "string" ? BigInt(m.collateral) : BigInt(m.collateral as number || 0),
+          subsidyAmount: subsidyAmountBigInt,
+          createdAt: String(m.createdAt || ''),
+          endTime: m.endTime ? (typeof m.endTime === "string" ? BigInt(m.endTime) : BigInt(m.endTime as number)) : undefined,
+          qYes: Number(m.qYes || 0),
+          qNo: Number(m.qNo || 0),
+        };
+      } catch (error) {
+        console.error("[parseCreatorMarkets] Error parsing market:", m, error);
+        throw error;
+      }
+    });
+    // console.log("[parseCreatorMarkets] Parsed result:", parsed);
+    return parsed;
   };
-}
+
+  
 
 async function getUserStats(address: string) {
   const res = await fetch(`/api/portfolio/stats?address=${address}`);
@@ -277,13 +317,13 @@ function CreatorPortfolioSection({
               label="Markets Created"
               value={stats.marketCount?.toString() || "0"}
               icon={<Zap className="h-4 w-4" />}
-              subtext={stats.totalMarketsVolume ? formatEth(BigInt(Math.floor(stats.totalMarketsVolume * 1e18)), 2) : "0 ETH"}
+              subtext={stats.totalMarketsVolume ? formatEth(BigInt(Math.floor(stats.totalMarketsVolume)), 4) : "0 ETH"}
             />
 
             {/* Total Fees */}
             <MetricCard
               label="Fees Earned"
-              value={stats.totalFees ? `${stats.totalFees.toFixed(3)} ETH` : "0 ETH"}
+              value={stats.totalFees ? formatEth(BigInt(Math.floor(stats.totalFees)), 4) : "0 ETH"}
               icon={<DollarSign className="h-4 w-4" />}
               trend="up"
               subtext="2% of volume"
@@ -292,8 +332,8 @@ function CreatorPortfolioSection({
             {/* Avg Market Volume */}
             <MetricCard
               label="Avg Market Volume"
-              value={stats.avgMarketVolume ? formatEth(BigInt(Math.floor(stats.avgMarketVolume * 1e18)), 2) : "0 ETH"}
-              icon={<BarChart3 className="h-4 w-4" />}
+              value={stats.avgMarketVolume ? formatEth(BigInt(Math.floor(stats.avgMarketVolume)), 4) : "0 ETH"}
+              icon={<ChartNoAxesCombined className="h-4 w-4" />}
             />
 
             {/* Creator Rank */}
@@ -430,7 +470,7 @@ function TraderPositionCard({ market, userAddress }: { market: TraderPosition; u
               <div className="grid grid-cols-3 gap-4 text-sm">
                 <div>
                   <span className="text-zinc-600 dark:text-zinc-400">Amount</span>
-                  <p className="font-mono font-medium">{formatEth(positionBalance, 4)}</p>
+                  <p className="font-mono font-medium">{formatUnits(positionBalance, 18)} {positionSide} Tokens</p>
                 </div>
                 <div>
                   <span className="text-zinc-600 dark:text-zinc-400">Entry Price</span>
@@ -491,12 +531,12 @@ function CreatorMarketCard({ market }: { market: CreatorMarket }) {
               <div className="grid grid-cols-4 gap-3 text-sm">
                 <div>
                   <span className="text-zinc-600 dark:text-zinc-400 text-xs">Volume</span>
-                  <p className="font-mono font-medium">{formatEth(BigInt(Math.floor(totalVolume * 1e18)), 2)}</p>
+                  <p className="font-mono font-medium">{formatEth(BigInt(Math.floor(totalVolume)), 4)}</p>
                 </div>
                 <div>
                   <span className="text-zinc-600 dark:text-zinc-400 text-xs">Fees Earned</span>
                   <p className="font-mono font-medium text-emerald-600 dark:text-emerald-400">
-                    +{creatorFees.toFixed(3)} ETH
+                    +{formatEth(BigInt(Math.floor(creatorFees)), 4)}
                   </p>
                 </div>
                 <div>
@@ -504,8 +544,8 @@ function CreatorMarketCard({ market }: { market: CreatorMarket }) {
                   <p className="font-mono font-medium">{(probabilities.yes * 100).toFixed(1)}%</p>
                 </div>
                 <div>
-                  <span className="text-zinc-600 dark:text-zinc-400 text-xs">Liquidity</span>
-                  <p className="font-mono font-medium">{formatEth(BigInt(Math.floor(Number(market.subsidyAmount || 0) * 1e18)), 2)}</p>
+                  <span className="text-zinc-600 dark:text-zinc-400 text-xs">Subsidy Amount</span>
+                  <p className="font-mono font-medium">{formatEth(market.subsidyAmount || 0n, 4)}</p>
                 </div>
               </div>
             </div>
@@ -587,6 +627,7 @@ export default function PortfolioClient() {
   const hasTraderPositions = portfolioData?.trader && Array.isArray(portfolioData.trader) && portfolioData.trader.length > 0;
   const hasCreatorMarkets = portfolioData?.creator && Array.isArray(portfolioData.creator) && portfolioData.creator.length > 0;
 
+
   if (!hasTraderPositions && !hasCreatorMarkets) {
     return (
       <div className="space-y-6">
@@ -602,7 +643,7 @@ export default function PortfolioClient() {
             <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">
               No trading positions or created markets yet. Start trading or creating markets!
             </p>
-            <div className="flex gap-3 justify-center">
+            <div className="flex gap-3 justify-center ">
               <Link href="/">
                 <Button>Browse Markets</Button>
               </Link>
