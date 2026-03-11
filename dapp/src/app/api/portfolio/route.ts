@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     // Shows all market statuses (OPEN, CLOSED, RESOLVED, SETTLED)
     const traderTrades = await prisma.trade.findMany({
       where: {
-        trader: normalizedAddress,
+        trader: { equals: normalizedAddress, mode: "insensitive" },
       },
       select: {
         marketId: true,
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
         },
         include: {
           trades: {
-            where: { trader: normalizedAddress },
+            where: { trader: { equals: normalizedAddress, mode: "insensitive" } },
             select: {
               id: true,
               side: true,
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
             },
           },
           redemptionEvents: {
-            where: { user: normalizedAddress },
+            where: { user: { equals: normalizedAddress, mode: "insensitive" } },
           },
         },
         orderBy: { updatedAt: "desc" },
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     // Shows all market statuses (OPEN, CLOSED, RESOLVED, SETTLED)
     const creatorMarkets: MarketWithRelations[] = await prisma.market.findMany({
       where: {
-        creator: normalizedAddress,
+        creator: { equals: normalizedAddress, mode: "insensitive" },
       },
       orderBy: { createdAt: "desc" },
       take: 50,

@@ -19,7 +19,7 @@ import {
   DollarSign,
   Users,
   Activity,
-  Volume2,
+  ChartNoAxesCombined,
   Clock
 } from "lucide-react";
 import Link from "next/link";
@@ -96,7 +96,7 @@ const MARKET_ABI = [
       { name: "yesToken_", type: "address" },
       { name: "noToken_", type: "address" },
       { name: "vault_", type: "address" },
-      { name: "isExpired_", type: "bool" },
+      { name: "lmsrB_", type: "uint256" },
       { name: "isClosed_", type: "bool" },
     ],
   },
@@ -107,22 +107,28 @@ async function getUserPortfolio(address: string): Promise<{ trader: TraderPositi
   if (!res.ok) return { trader: [], creator: [] };
   const data = await res.json();
 
-  // Parse string values back to proper types for calculations
-  const parseTraderMarkets = (markets: Array<Record<string, unknown>>): TraderPosition[] =>
-    markets.map((m: Record<string, unknown>) => ({
-      id: String(m.id || ''),
-      contractAddress: m.contractAddress ? String(m.contractAddress) : undefined,
-      title: m.title ? String(m.title) : undefined,
-      category: String(m.category || ''),
-      status: String(m.status || ''),
-      amount: typeof m.amount === "string" ? BigInt(m.amount) : BigInt(m.amount as number || 0),
-      cost: typeof m.cost === "string" ? BigInt(m.cost) : BigInt(m.cost as number || 0),
-      collateral: typeof m.collateral === "string" ? BigInt(m.collateral) : BigInt(m.collateral as number || 0),
-      subsidyAmount: m.subsidyAmount ? (typeof m.subsidyAmount === "string" ? BigInt(m.subsidyAmount) : BigInt(m.subsidyAmount as number)) : undefined,
-      endTime: m.endTime ? (typeof m.endTime === "string" ? BigInt(m.endTime) : BigInt(m.endTime as number)) : undefined,
-      qYes: Number(m.qYes || 0),
-      qNo: Number(m.qNo || 0),
-    }));
+
+const decimalToBigInt = (val: unknown): bigint => {
+  if (val === null || val === undefined) return 0n;
+  const num = Math.floor(Number(String(val)));
+  return BigInt(num);
+};
+
+const parseTraderMarkets = (markets: Array<Record<string, unknown>>): TraderPosition[] =>
+  markets.map((m) => ({
+    id: String(m.id || ''),
+    contractAddress: m.contractAddress ? String(m.contractAddress) : undefined,
+    title: m.title ? String(m.title) : undefined,
+    category: String(m.category || ''),
+    status: String(m.status || ''),
+    amount: decimalToBigInt(m.amount),        
+    cost: decimalToBigInt(m.cost),          
+    collateral: decimalToBigInt(m.collateral),
+    subsidyAmount: m.subsidyAmount ? decimalToBigInt(m.subsidyAmount) : undefined,
+    endTime: m.endTime ? BigInt(String(m.endTime)) : undefined,
+    qYes: Number(m.qYes || 0),
+    qNo: Number(m.qNo || 0),
+  }));
 
   const parseCreatorMarkets = (markets: Array<Record<string, unknown>>): CreatorMarket[] =>
     markets.map((m: Record<string, unknown>) => ({
@@ -214,8 +220,8 @@ function TraderPortfolioSection({
             {/* Total Volume */}
             <MetricCard
               label="Total Volume"
-              value={stats.totalVolume ? formatEth(BigInt(Math.floor(stats.totalVolume * 1e18)), 2) : "0 ETH"}
-              icon={<Volume2 className="h-4 w-4" />}
+              value={stats.totalVolume ? formatEth(BigInt(Math.floor(stats.totalVolume)), 4) : "0 ETH"}
+              icon={<ChartNoAxesCombined className="h-4 w-4" />}
               subtext={`${stats.tradeCount || 0} trades`}
             />
 
@@ -224,7 +230,7 @@ function TraderPortfolioSection({
               label="ROI"
               value={stats.roi ? `${stats.roi.toFixed(1)}%` : "0%"}
               icon={<Target className="h-4 w-4" />}
-              subtext={stats.avgTradeSize ? `${formatEth(BigInt(Math.floor(stats.avgTradeSize * 1e18)), 2)} avg` : "N/A"}
+              subtext={stats.avgTradeSize ? `${formatEth(BigInt(Math.floor(stats.avgTradeSize)), 4)} avg` : "N/A"}
             />
           </div>
         )}

@@ -379,6 +379,7 @@ export default function MarketDetailClient({ market }: Props) {
         throw new Error("Value mismatch: ETH amount must exactly match quote cost");
       }
 
+      // Debug simulation before sending transaction
       try {
         const recoveredSigner = recoverSigner(quoteStruct, signedQuote.signature as `0x${string}`);
         console.log("Recovered signer:", recoveredSigner);
@@ -395,7 +396,8 @@ export default function MarketDetailClient({ market }: Props) {
       } catch (simError) {
         console.error("🚨 Debug simulation failed:", simError);
       }
-
+      // -----
+      
       setShowConfirmModal(false);
       setTxStatus("pending");
 

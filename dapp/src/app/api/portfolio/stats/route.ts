@@ -32,6 +32,8 @@ interface CreatorStats {
 export async function GET(req: NextRequest) {
   const address = req.nextUrl.searchParams.get("address");
 
+  console.log("[portfolio/stats] Fetching stats for address:", address);
+
   if (!address) {
     return NextResponse.json(
       { error: "Address parameter required" },
@@ -57,7 +59,9 @@ export async function GET(req: NextRequest) {
 
     // Get all trader's trades with market status
     const trades = await prisma.trade.findMany({
-      where: { trader: normalizedAddress },
+       where: {
+    trader: { equals: normalizedAddress, mode: "insensitive" }, 
+  },
       include: {
         market: {
           select: {
@@ -67,6 +71,9 @@ export async function GET(req: NextRequest) {
         },
       },
     });
+
+    console.log(`[portfolio/stats] Found ${trades.length} trades for trader ${normalizedAddress}`);
+    console.log("[portfolio/stats] trades:", trades);
 
     if (trades.length > 0) {
       traderStats.tradeCount = trades.length;
@@ -123,7 +130,7 @@ export async function GET(req: NextRequest) {
     };
 
     const createdMarkets = await prisma.market.findMany({
-      where: { creator: normalizedAddress },
+      where: { creator: { equals: normalizedAddress, mode: "insensitive" } },
     });
 
     if (createdMarkets.length > 0) {

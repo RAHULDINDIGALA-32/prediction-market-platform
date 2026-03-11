@@ -41,6 +41,7 @@ export default function NavBar({ children }: Props) {
                   src="/logo.png"
                   alt="0x01 Markets Logo"
                   fill
+                  sizes="44px"
                   className="rounded-full object-contain"
                   priority
                 />
