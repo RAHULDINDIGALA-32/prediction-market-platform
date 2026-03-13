@@ -1,77 +1,36 @@
-# 0x01 Markets
+<div align="center">
 
-> **On-Chain Decentralized Prediction Market Platform**
->
->An industry-grade decentralized prediction market platform built on Ethereum, featuring LMSR AMM trading, optimistic oracle resolution, non-custodial fund settlement, and a full-stack Next.js dApp backed by well tested Solidity smart contracts.
+# <img src="./dapp/public/logo.png" alt="0x01 Markets Logo" width="70" align="center" /> 0x01 Markets
+</div>
 
-![Prediction Markets](./dapp/public/home-page.png)
+**Live dApp:** https://0x01-markets.vercel.app
+
+On-chain binary prediction market platform built on Ethereum with LMSR pricing, signed off-chain quote generation, optimistic oracle resolution, and a full-stack Next.js dApp backed by Foundry smart contracts.
+
+![0x01 Markets home page](./dapp/public/home-page.png)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Solidity](https://img.shields.io/badge/Solidity-^0.8.27-blue)](https://docs.soliditylang.org/)
-[![Network](https://img.shields.io/badge/Network-Sepolia%20Testnet-orange)](https://www.alchemy.com/overviews/ethereum-sepolia)
-[![Frontend](https://img.shields.io/badge/Frontend-Next.js%2015-black)](https://nextjs.org/)
-
----
-
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [Core Features](#core-features)
-- [Quick Start](#quick-start)
-- [System Architecture](#system-architecture)
-- [Smart Contracts](#smart-contracts)
-- [Testing & Security](#testing--security)
-- [Deployment](#deployment)
-- [Contributing](#contributing)
-- [License](#license)
-
----
+[![Solidity](https://img.shields.io/badge/Solidity-0.8.27-363636)](https://docs.soliditylang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16.1.1-000000)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19.2.3-149ECA)](https://react.dev/)
+[![Network](https://img.shields.io/badge/Network-Sepolia-orange)](https://sepolia.etherscan.io/)
 
 ## Overview
 
-**0x01 Markets** is a fully-functional prediction market platform designed for institutional-grade reliability, transparency, and scalability. It enables users to create and trade binary (YES/NO) outcome markets using an Automated Market Maker (AMM) model with cryptographically verified oracle-driven settlement.
+0x01 Markets is a monorepo for a prediction market protocol and application layer. The system lets approved creators launch binary markets, traders buy or sell YES/NO exposure using LMSR-based pricing, and resolvers finalize outcomes through a bonded optimistic oracle workflow. Settlement is non-custodial and isolated per market through a dedicated vault flow.
 
+This repository is best described as a production-oriented testnet build: the architecture is serious, the contract surface is separated cleanly, and the project includes solid protocol tests and a working application stack, while still leaving room for audit hardening and operational maturity before a mainnet launch.
 
-### Key Highlights
-- **Live on Sepolia Testnet** – Contracts deployed and verified on Etherscan.
-- **Vercel-ready frontend** – Next.js 16 app optimized for production deployment.
-- **Type-safe full stack** – TypeScript across frontend, backend, and contract interfaces.
-- **Production architecture** – Contract test suite with high coverage, separation of concerns between trading/oracle/settlement.
-- **AMM-powered trading** – Logarithmic Market Scoring Rule (LMSR) for efficient price discovery and bounded loss.
-- **Trustless settlement** – Bonded proposers, optimistic oracle resolution, and dispute windows.
----
+## What This Project Demonstrates
 
-## Repository Structure
-This is a **monorepo** with a clear split between the dApp and the contracts:
-```text
-.
-├── dapp/                 # Next.js 16 app + REST API + Prisma/PostgreSQL
-│   ├── src/app/          # Next.js app router pages & API routes
-│   ├── src/components/   # UI and domain components
-│   ├── src/lib/          # LMSR engine, quote logic, auth, services
-│   ├── prisma/           # Prisma schema and migrations
-│   ├── scripts/          # Node scripts (market registration, event sync)
-│   └── package.json      # Frontend & backend scripts
-│
-├── foundry/              # Solidity contracts & tests (Foundry)
-│   ├── src/              # Core protocol contracts
-│   │   ├── MarketFactory.sol
-│   │   ├── Market.sol
-│   │   ├── OutcomeToken.sol
-│   │   ├── Vault.sol
-│   │   ├── OracleAdapter.sol
-│   │   ├── OracleBudget.sol
-│   │   ├── QuoteVerifier.sol
-│   │   ├── SettlementEngine.sol
-│   │   └── PlatformTreasury.sol
-│   ├── test/             # Unit + integration + invariant tests
-│   └── foundry.toml      # Compiler & project configuration
-│
-├── README.md             # This file
-└── LICENSE
-```
----
-## Core Features
+- Protocol design for binary prediction markets using an LMSR market-making model.
+- Separation of concerns across market creation, trading, treasury, oracle budgeting, resolution, and settlement.
+- Signed quote execution using EIP-712-style verification through `QuoteVerifier`.
+- Full-stack TypeScript integration with Next.js App Router, Prisma, PostgreSQL, RainbowKit, Wagmi, and Viem.
+- Blockchain-to-database synchronization for market, oracle, settlement, and authorization data.
+- A meaningful Foundry test suite covering lifecycle, fund flow, oracle, settlement, and invariant-heavy protocol behavior.
+
+### Core Features
 
 ### 🎯 Trading Engine
 
@@ -116,80 +75,88 @@ This is a **monorepo** with a clear split between the dApp and the contracts:
 | **Next.js API routes** | REST-style endpoints for markets, trades, portfolio, oracle, settlement, and cron-style sync. |
 | **Event indexing** | Background scripts and API endpoints synchronize blockchain events into PostgreSQL. |
 
----
+### Smart Contract System
 
-## Quick Start
+| Contract | Responsibility | Sepolia Deployment |
+|---|---|---|
+| `MarketFactory` | Creates markets, enforces creator whitelist, tracks metadata hash uniqueness, routes creation fees and subsidy. | [0x46B...88c](https://sepolia.etherscan.io/address/0x46B9Ac33F1FD06A9Ab2a57aaB08b50746E20d88c) |
+| `Market` | Executes trades, mints and burns outcome tokens, manages market state, and records quote consumption. | [0x46B...88c](https://sepolia.etherscan.io/address/0x46B9Ac33F1FD06A9Ab2a57aaB08b50746E20d88c) |
+| `OutcomeToken` | ERC-20 YES and NO tokens minted by markets and burned during settlement or sell flow. | [0x46B...88c](https://sepolia.etherscan.io/address/0x46B9Ac33F1FD06A9Ab2a57aaB08b50746E20d88c) |
+| `Vault` | Holds and isolates market collateral. | [0xFe8...E76](https://sepolia.etherscan.io/address/0xFe8Ce9222B437cE7ddbb3f733165FFb3A8E28E76) |
+| `QuoteVerifier` | Verifies signed trade quotes and manages signer + nonce logic. | [0x4a0...602](https://sepolia.etherscan.io/address/0x4a03B6159Dfc32f2ae52E3388377DE3F2fe76602) |
+| `OracleBudget` | Funds oracle-side market bounties. | [0x191...Df6](https://sepolia.etherscan.io/address/0x191785021Ba67222DDd72405cC06E262fa9A7Df6) |
+| `OracleAdapter` | Handles proposer/disputer flow and final market outcomes. | [0x447...192](https://sepolia.etherscan.io/address/0x447f8D2cc12fD096b86865f529dd5e0bC831A192) |
+| `SettlementEngine` | Redeems winning exposure and closes settlement lifecycle. | [0x23d...8f6](https://sepolia.etherscan.io/address/0x23daAe106b33F5181d08970115c43A9e5036a8f6) |
+| `PlatformTreasury` | Accrues protocol-side fees. | [0x9F0...82c](https://sepolia.etherscan.io/address/0x9F005b9be16c7Cb8B63d79487eCF6f136669F82c) |
 
-### Prerequisites
 
-- **Node.js**: 18.17+ (LTS recommended)
-- **npm** or **yarn**: Latest stable version
-- **Foundry**: For smart contract development
-- **Git**: Version control
-- **PostgreSQL**: Database (local or remote)
 
-### Installation
+### Application Layer
 
-```bash
-# 1. Clone repository
-git clone https://github.com/RAHULDINDIGALA-32/0x01-markets.git
-cd 0x01-markets
+The dApp includes:
 
-# 2. Install dApp dependencies
-cd dapp
-npm install
-
-# 3. Install Foundry dependencies (smart contracts)
-cd ../foundry
-forge install
-
-# 4. Verify installation
-forge --version
-cd ../dapp && npm run build
-```
-
-### Environment Configuration
-
-Create `.env.local` in the `dapp` directory:
-
-```env
-# ==================== BLOCKCHAIN ====================
-NEXT_PUBLIC_CHAIN_ID=11155111
-NEXT_PUBLIC_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
-NEXT_PUBLIC_NETWORK_NAME=sepolia
-
-# ==================== CONTRACT ADDRESSES ====================
-# Sepolia Deployment
-NEXT_PUBLIC_MARKET_FACTORY_ADDRESS=0x46B9Ac33F1FD06A9Ab2a57aaB08b50746E20d88c
-NEXT_PUBLIC_VAULT_ADDRESS=0x...
-NEXT_PUBLIC_ORACLE_ADAPTER_ADDRESS=0x...
-NEXT_PUBLIC_ORACLE_BUDGET_ADDRESS=0x...
-NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS=0x...
-NEXT_PUBLIC_SETTLEMENT_ENGINE_ADDRESS=0x...
-NEXT_PUBLIC_PLATFORM_TREASURY_ADDRESS=0x...
-
-# ==================== DATABASE ====================
-NEXT_PUBLIC_DATABASE_URL=postgresql://user:password@host:port/database?pgbouncer=true
-NEXT_PUBLIC_DIRECT_URL=postgresql://user:password@host:port/database
-
-# ==================== QUOTE SERVICE ====================
-NEXT_PUBLIC_QUOTE_SERVICE_ENDPOINT=http://localhost:3001
-QUOTE_SIGNER_PRIVATE_KEY=0x...
-
-# ==================== ENVIRONMENT ====================
-NODE_ENV=development
-```
-
-### Run Development Server
-
-```bash
-cd dapp
-npm run dev
-```
-
-Visit **http://localhost:3000** in your browser.
+- Market browsing and detail views.
+- Quote fetching and trade execution flows.
+- Portfolio and settlement views.
+- Oracle and settlement operator panels.
+- Admin workflows for market registration, signer management, authorization sync, and reconciliation.
+- Prisma-backed persistence for market state and protocol events.
 
 ---
+
+## Tech Stack
+
+### Smart Contracts
+
+- Solidity
+- Foundry
+- OpenZeppelin Contracts
+
+### Frontend and Backend
+
+- Next.js 16
+- React 19
+- TypeScript
+- RainbowKit
+- Wagmi
+- Viem
+- Ethers
+- Prisma
+- PostgreSQL
+- Tailwind CSS 4
+
+---
+
+## Repository Structure
+This is a monorepo with a clear split between the dApp and the contracts:
+
+```text
+.
+├── dapp/                 # Next.js 16 app + REST API + Prisma/PostgreSQL
+│   ├── src/app/          # Next.js app router pages & API routes
+│   ├── src/components/   # UI and domain components
+│   ├── src/lib/          # LMSR engine, quote logic, auth, services
+│   ├── prisma/           # Prisma schema and migrations
+│   ├── scripts/          # Node scripts (market registration, event sync)
+│   └── package.json      # Frontend & backend scripts
+│
+├── foundry/              # Solidity contracts & tests (Foundry)
+│   ├── src/              # Core protocol contracts
+│   │   ├── MarketFactory.sol
+│   │   ├── Market.sol
+│   │   ├── OutcomeToken.sol
+│   │   ├── Vault.sol
+│   │   ├── OracleAdapter.sol
+│   │   ├── OracleBudget.sol
+│   │   ├── QuoteVerifier.sol
+│   │   ├── SettlementEngine.sol
+│   │   └── PlatformTreasury.sol
+│   ├── test/             # Unit + integration + invariant tests
+│   └── foundry.toml      # Compiler & project configuration
+│
+├── README.md             # This file
+└── LICENSE
+```
 
 ## System Architecture
 
@@ -231,151 +198,6 @@ Visit **http://localhost:3000** in your browser.
                                 └──────────────────────────┘
 ```
 
-### Component Responsibilities
-
-#### **Frontend (Next.js + React)**
-- Market discovery and filtering
-- Trade execution UI with real-time quote preview
-- Portfolio tracking and performance analytics
-- Settlement UI for winning token redemption
-- Admin controls for market creation and management
-
-#### **Backend (Node.js + Express/Next.js API Routes)**
-- REST API endpoints for markets, trades, and settlement data
-- Off-chain quote generation and signing
-- Event synchronization (blockchain → database)
-- User session management and authorization
-- Database transactions and rollback handling
-
-#### **Smart Contracts (Solidity + Foundry)**
-- **MarketFactory**: Deploys markets, manages whitelisting
-- **Market**: Core trading logic, state management
-- **OutcomeToken**: ERC20 YES/NO tokens
-- **Vault**: ETH custody and redemption
-- **QuoteVerifier**: Validates off-chain quotes
-- **OracleAdapter**: Oracle integration and settlement
-- **SettlementEngine**: Outcome resolution and payout
-
-#### **Database (PostgreSQL)**
-- Market metadata and state
-- User portfolios and transaction history
-- Quote records for audit trails
-- Oracle proposals and voting state
-
----
-
-
-## Smart Contracts
-
-### Deployment Status
-
-| Contract | Address | Network | Status |
-|----------|---------|---------|--------|
-| MarketFactory | `0x46B9Ac33...` | Sepolia | ✅ Deployed |
-| Vault | `0x...` | Sepolia | ✅ Deployed |
-| OracleAdapter | `0x...` | Sepolia | ✅ Deployed |
-| OracleBudget | `0x...` | Sepolia | ✅ Deployed |
-| QuoteVerifier | `0x...` | Sepolia | ✅ Deployed |
-| SettlementEngine | `0x...` | Sepolia | ✅ Deployed |
-
-
-### Contract Architecture
-
-```
-MarketFactory
-├── Creates → Market contracts
-├── Manages → Creator whitelist
-├── Tracks → Market metadata
-└── Collects → Creation fees (0.01 ETH)
-
-Market
-├── Mints/Burns → YES & NO OutcomeTokens
-├── Executes → Trades (via QuoteVerifier)
-├── Manages → Market state (OPEN/CLOSED/SETTLED)
-└── Stores → LMSR parameters
-
-Vault
-├── Holds → ETH per market
-├── Enables → Deposits & Withdrawals
-└── Enforces → Atomic semantics
-
-OracleAdapter
-├── Receives → Oracle proposals
-├── Manages → Dispute window
-└── Finalizes → Outcomes
-
-SettlementEngine
-├── Settles → Markets post-oracle
-├── Burns → Losing tokens
-├── Redeems → Winning tokens for ETH
-└── Enforces → One-time redemption
-```
-
----
-
-## Testing & Security
-
-### Test Coverage
-
-- **Smart Contracts**: 95%+ coverage via Foundry
-- **Frontend**: 85%+ coverage via Jest
-- **API Routes**: 90%+ coverage via integration tests
-
-### Security Measures
-
-✅ **Implemented:**
-- Access control on all privileged functions
-- Reentrancy guards on external calls
-- EIP-712 signature verification
-- Market state synchronization checks
-- Bounds checking on all arithmetic
-- Event logging for audit trails
-
-⚠️ **Known Limitations:**
-- Quote expiry managed off-chain (rely on quote service timestamp)
-- Oracle trust model assumes proposer honesty (game-theoretically incentivized)
-- No formal verification (future improvement)
-- 
----
-
-## Deployment
-
-### Sepolia Testnet Deployment
-
-The platform is **live on Sepolia** with contracts verified on Etherscan.
-
-#### **Verify Contracts on Etherscan**
-
-```bash
-cd foundry
-
-# Verify MarketFactory
-forge verify-contract \
-  --chain-id 11155111 \
-  <DEPLOYED_ADDRESS> \
-  src/MarketFactory.sol:MarketFactory \
-  --constructor-args $(cast abe "0x...")
-```
-
-#### **Get Sepolia Testnet ETH**
-
-1. Visit [Sepolia Faucet](https://www.alchemy.com/faucets/ethereum-sepolia)
-2. Connect wallet and request testnet ETH
-3. Faucet distributes 0.5 ETH per request
-
-### Mainnet Deployment (Future)
-
-Before mainnet deployment:
-
-1. [ ] Complete formal verification of critical contracts
-2. [ ] Full security audit from reputable firm
-3. [ ] Governance setup for contract upgrades
-4. [ ] Mainnet oracle integration (Chainlink, Pyth)
-5. [ ] Insurance fund allocation
-6. [ ] Regulatory compliance review
-
----
-
 ## Architecture Decisions
 
 ### Why LMSR?
@@ -399,32 +221,170 @@ The Logarithmic Market Scoring Rule (LMSR) provides:
 
 ---
 
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- npm
+- Foundry
+- PostgreSQL
+- Git
+
+### 1. Install dependencies
+
+```bash
+cd dapp
+npm install
+
+cd ../foundry
+forge install
+```
+
+### 2. Configure environment variables
+
+Create `dapp/.env.local` and populate the values relevant to your setup.
+
+```env
+# Public chain and wallet config
+NEXT_PUBLIC_CHAIN_ID=11155111
+NEXT_PUBLIC_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/your-key
+NEXT_PUBLIC_SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/your-key
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your-project-id
+
+# Public contract addresses
+NEXT_PUBLIC_MARKET_FACTORY_ADDRESS=0x...
+NEXT_PUBLIC_QUOTE_VERIFIER_ADDRESS=0x...
+NEXT_PUBLIC_ORACLE_ADAPTER_ADDRESS=0x...
+NEXT_PUBLIC_SETTLEMENT_ENGINE_ADDRESS=0x...
+NEXT_PUBLIC_ADMIN_ADDRESS=0x...
+
+# Database
+NEXT_PUBLIC_DATABASE_URL=postgresql://user:password@host:5432/dbname
+NEXT_PUBLIC_DIRECT_URL=postgresql://user:password@host:5432/dbname
+
+# Server-side operational secrets
+RPC_URL=https://eth-sepolia.g.alchemy.com/v2/your-key
+ADMIN_SECRET=replace-me
+CRON_SECRET=replace-me
+ENCRYPTION_KEY=64_hex_chars
+
+# Optional integrations
+NEXT_PUBLIC_PINATA_API_KEY=your-pinata-key
+NEXT_PUBLIC_PINATA_SECRET_KEY=your-pinata-secret
+NEXT_PUBLIC_PINATA_GATEWAY=https://gateway.pinata.cloud/ipfs/
+
+# Quote generation
+CHAIN_ID=11155111
+QUOTE_VERIFIER_ADDRESS=0x...
+QUOTE_SIGNER_KEY=0x...
+```
+
+### 3. Run the dApp
+
+```bash
+cd dapp
+npm run prisma:generate
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+## Useful Commands
+
+### dApp
+
+```bash
+cd dapp
+npm run dev
+npm run build
+npm run start
+npm run lint
+npm run prisma:generate
+npm run prisma:migrate
+npm run prisma:studio
+npm run sync-events
+npm run register-market
+```
+
+### Contracts
+
+```bash
+cd foundry
+forge build
+forge test -vvv
+forge coverage --report lcov
+make build
+make test
+make deploy-local
+make deploy-sepolia
+make verify-all-contracts
+```
+
+## Testing and Quality
+
+- Foundry unit tests for core contracts.
+- Integration-style tests for market flow and fund flow.
+- Oracle and settlement behavior tests.
+- Invariant-focused coverage for market state and lifecycle assumptions.
+- Type-checked application code and linting support in the dApp.
+
+## Deployment Notes
+
+The deployment flow is centered around [`foundry/script/DeployPlatform.s.sol`](./foundry/script/DeployPlatform.s.sol), which deploys the protocol components in a deterministic nonce-based sequence and precomputes dependent addresses before instantiation.
+
+The Foundry `Makefile` includes helpers for:
+
+- local deployment
+- Sepolia deployment
+- resume deployment
+- Etherscan verification per contract
+- batch verification of the protocol suite
+
+## Strengths
+
+- Strong separation between protocol primitives and application services.
+- Good choice of testing framework and contract organization for a Web3 project.
+- Thoughtful handling of quote verification, nonces, and role-gated operations.
+- Realistic operator workflows beyond a basic hackathon demo.
+- End-to-end monorepo structure that shows both smart contract and product engineering ability.
+
+## Current Gaps Before Mainnet Readiness
+
+- No audit or formal verification evidence included.
+- Operational secrets and environment handling would benefit from tightening and standardization.
+- No explicit CI, monitoring, incident runbooks, or production deployment documentation in the root repo.
+- Frontend/backend automated test strategy is not yet as visible as the contract testing story.
+- Economic attack analysis and oracle game-theory documentation could be expanded further.
+
+---
+
 ## Contributing
 
 We welcome contributions! Please follow these guidelines:
 
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** changes with clear messages (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request with detailed description
+1. Fork the repository.
+2. Create a feature branch: `git checkout -b feature/amazing-feature`.
+3. Commit changes with clear messages: `git commit -m "Add amazing feature"`.
+4. Push to your branch: `git push origin feature/amazing-feature`.
+5. Open a Pull Request with a detailed description, screenshots (if UI), and test plan.
 
 ### Contribution Areas
 
-- Smart contract optimizations and security improvements
-- Frontend UX/UI enhancements
-- Backend API and database optimizations
-- Additional test coverage
-- Documentation improvements
-- Bug fixes and edge case handling
+- Smart contract gas & security optimizations.
+- Frontend UX/UI enhancements for traders, creators, and oracle participants.
+- Backend API, database indexing, and sync performance improvements.
+- Additional test coverage (contracts, API routes, UI).
+- Documentation and examples (recipes, tutorials, diagrams).
+- Bug fixes and corner case handling.
 
 ### Development Best Practices
 
-- Write tests for all new features
-- Ensure linting passes (`npm run lint`)
-- Document public APIs and complex logic
-- Follow existing code style conventions
-- Update relevant documentation
+- Write tests for all new features and bug fixes.
+- Ensure linting passes: `npm run lint` in dapp/, `forge test` in foundry/.
+- Document public APIs and non-trivial logic paths.
+- Follow the existing code style and patterns.
+- Update this README (and any in-code docs) when behavior changes.
 
 ---
 
