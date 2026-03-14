@@ -15,6 +15,7 @@ interface TradeExecutionRequest {
   // On-chain transaction confirmation
   txHash: string;
   txBlockNumber: number;
+  quoteHash?: string;
   
   // Quote data for verification
   marketId: string;
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
     const {
       txHash,
       txBlockNumber,
+      quoteHash,
       marketId,
       trader,
       outcome,
@@ -147,6 +149,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
         { status: 400 }
       );
     }
+
+    // Market token balances are stored in token units, while trade amounts are submitted in wei.
+    const tokenAmount = new Decimal(amountBigInt.toString()).div('1000000000000000000');
 
     //  Check if trade with this txHash already exists
     const existingTrade = await prisma.trade.findFirst({
@@ -232,15 +237,15 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
     const isNoSell = outcome === 1 && isSell;
 
     const newQYes = isYesBuy
-      ? market.qYes.plus(amountBigInt.toString())
+      ? market.qYes.plus(tokenAmount)
       : isYesSell
-        ? market.qYes.minus(amountBigInt.toString())
+        ? market.qYes.minus(tokenAmount)
         : market.qYes;
 
     const newQNo = isNoBuy
-      ? market.qNo.plus(amountBigInt.toString())
+      ? market.qNo.plus(tokenAmount)
       : isNoSell
-        ? market.qNo.minus(amountBigInt.toString())
+        ? market.qNo.minus(tokenAmount)
         : market.qNo;
 
     const newCollateral = !isSell
@@ -296,30 +301,48 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
           throw new Error('UPDATED_MARKET_NOT_FOUND');
         }
 
-        // Upsert SignedQuote as COMMITTED
-        const quoteHash = ethers.keccak256(
-          ethers.AbiCoder.defaultAbiCoder().encode(
-            ['address', 'address', 'uint8', 'uint256', 'uint256', 'bool'],
-            [trader, marketId, outcome, amountBigInt, costBigInt, isSell]
-          )
-        );
+        // Mark the exact signed quote as committed using the canonical quote hash returned at signing time.
+        const matchedSignedQuote = quoteHash
+          ? await tx.signedQuote.findUnique({
+              where: { quoteHash },
+              select: { id: true },
+            })
+          : await tx.signedQuote.findFirst({
+              where: {
+                trader,
+                marketId,
+                nonce: nonceBigInt,
+                amount: new Decimal(amountBigInt.toString()),
+                cost: new Decimal(costBigInt.toString()),
+                isSell,
+                marketVersion,
+                signature,
+              },
+              select: { id: true },
+              orderBy: { createdAt: 'desc' },
+            });
 
-        await tx.signedQuote.upsert({
-          where: { quoteHash },
-          update: { status: 'COMMITTED' },
-          create: {
-            trader,
-            marketId,
-            quoteHash,
-            signature,
-            amount: new Decimal(amountBigInt.toString()),
-            cost: new Decimal(costBigInt.toString()),
-            nonce: nonceBigInt,
-            isSell,
-            marketVersion,
-            status: 'COMMITTED',
-          },
-        });
+        if (matchedSignedQuote) {
+          await tx.signedQuote.update({
+            where: { id: matchedSignedQuote.id },
+            data: { status: 'COMMITTED' },
+          });
+        } else {
+          await tx.signedQuote.create({
+            data: {
+              trader,
+              marketId,
+              quoteHash: quoteHash ?? ethers.keccak256(ethers.toUtf8Bytes(`${txHash}:${marketId}:${trader}:${nonceBigInt.toString()}`)),
+              signature,
+              amount: new Decimal(amountBigInt.toString()),
+              cost: new Decimal(costBigInt.toString()),
+              nonce: nonceBigInt,
+              isSell,
+              marketVersion,
+              status: 'COMMITTED',
+            },
+          });
+        }
 
         // Update TraderNonce atomically
         await tx.traderNonce.upsert({

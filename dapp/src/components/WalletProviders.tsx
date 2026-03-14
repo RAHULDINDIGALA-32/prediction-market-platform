@@ -4,7 +4,8 @@ import "@rainbow-me/rainbowkit/styles.css";
 import {
   getDefaultConfig,
   RainbowKitProvider,
-  lightTheme
+  lightTheme,
+  darkTheme
 } from "@rainbow-me/rainbowkit";
 import { WagmiProvider, http } from "wagmi";
 import {
@@ -47,13 +48,14 @@ const WalletProviders = ({ children }: { children: React.ReactNode }) => {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
-        theme={lightTheme({
+        theme={darkTheme({
       accentColor: 'white',
       accentColorForeground: 'black',
       borderRadius: 'small',
       fontStack: 'system',
       overlayBlur: 'small',
-    })}
+    })} 
+    modalSize="compact"
         >
           {children}
         </RainbowKitProvider>

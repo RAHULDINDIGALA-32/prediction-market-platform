@@ -3,29 +3,50 @@ import { applyTrade } from "./stateMachine";
 import { Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 
+const WEI_SCALE = new Decimal("1000000000000000000");
+
 /**
- * Convert Prisma Decimal to BigInt, scaling by 10^18 for wei precision
- * This handles decimal values from the database like 0.721348
- * and converts them to proper wei-scale integers
+ * Convert token-unit decimals from the database into wei-scale integers.
+ * Example: 4 -> 4e18, 0.5 -> 5e17
  */
-const toBigInt = (value: Decimal): bigint => {
+const toTokenWei = (value: Decimal): bigint => {
     const str = value.toString();
     
-    // If value is a decimal (e.g., 0.721348), scale it by 10^18
     if (str.includes('.')) {
         const parts = str.split('.');
         const integerPart = parts[0];
         const decimalPart = parts[1];
         
-        // Pad decimal part to 18 places (wei precision)
         const paddedDecimal = decimalPart.padEnd(18, '0').slice(0, 18);
         const scaledString = integerPart + paddedDecimal;
         
         return BigInt(scaledString);
     }
     
-    // If already an integer, scale it by 10^18
     return BigInt(str) * BigInt(10) ** BigInt(18);
+};
+
+/**
+ * Convert values that may already be stored in wei integers, or as decimal ETH/token values,
+ * into a wei-scale bigint.
+ */
+const toWeiAmount = (value: Decimal): bigint => {
+    const str = value.toString();
+
+    if (str.includes('.')) {
+        const parts = str.split('.');
+        const integerPart = parts[0];
+        const decimalPart = parts[1];
+        const paddedDecimal = decimalPart.padEnd(18, '0').slice(0, 18);
+
+        return BigInt(integerPart + paddedDecimal);
+    }
+
+    return BigInt(str);
+};
+
+const fromTokenWei = (value: bigint): Decimal => {
+    return new Decimal(value.toString()).div(WEI_SCALE);
 };
 
 export async function executeTrade({
@@ -59,29 +80,29 @@ export async function executeTrade({
         if(market.version !== expectedVersion) throw new Error("Stale Quote!!");
 
         const marketState = {
-            qYes: toBigInt(market.qYes),
-            qNo: toBigInt(market.qNo),
-            b: toBigInt(market.lmsrB), // Use creator-specified lmsrB
-            collateral: toBigInt(market.collateral),
+            qYes: toTokenWei(market.qYes),
+            qNo: toTokenWei(market.qNo),
+            b: toTokenWei(market.lmsrB), // Use creator-specified lmsrB
+            collateral: toWeiAmount(market.collateral),
             version: market.version,
         };
 
         const { newState, cost } = applyTrade(
             marketState,
             side,
-            toBigInt(amount),
+            toWeiAmount(amount),
             isSell
         );
 
-        if (cost !== toBigInt(expectedCost)) {
+        if (cost !== toWeiAmount(expectedCost)) {
             throw new Error("Quote mismatch");
         }
 
         await tx.market.update({
             where: { id: marketId },
             data: {
-                qYes: new Decimal(newState.qYes.toString()),
-                qNo: new Decimal(newState.qNo.toString()),
+                qYes: fromTokenWei(newState.qYes),
+                qNo: fromTokenWei(newState.qNo),
                 collateral: new Decimal(newState.collateral.toString()),
                 version: newState.version, 
             },

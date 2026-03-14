@@ -26,6 +26,7 @@ interface SignQuoteRequest {
 
 interface SignedQuoteResponse {
     success: boolean;
+    quoteHash?: string;
     quote?: {
         trader: `0x${string}`;
         market: `0x${string}`;
@@ -37,6 +38,7 @@ interface SignedQuoteResponse {
         nonce: string;
         minAmountOut: string;
         minReturn: string;
+        marketVersion: number;
         signature: string;
     };
     error?: string;
@@ -241,30 +243,32 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignedQuo
         const signedQuote = await signTradeQuote(quoteData, QUOTE_VERIFIER_ADDRESS, wallet);
 
         // Store signed quote for tracking and later reconciliation
+        const quoteHash = ethers.keccak256(
+            ethers.AbiCoder.defaultAbiCoder().encode(
+                [
+                    "address", "address", "uint8", "uint256", "uint256",
+                    "uint256", "uint256", "bool", "uint256", "uint256"
+                ],
+                [
+                    body.trader,
+                    market.contractAddress!,
+                    contractOutcome,  // Use contract enum value for hash
+                    amount,
+                    cost,
+                    body.deadline,
+                    nonce,
+                    body.isSell,
+                    BigInt(body.minAmountOut),
+                    BigInt(body.minReturn),
+                ]
+            )
+        );
+
         await prisma.signedQuote.create({
             data: {
                 trader: body.trader,
                 marketId: body.marketId,
-                quoteHash: ethers.keccak256(
-                    ethers.AbiCoder.defaultAbiCoder().encode(
-                        [
-                            "address", "address", "uint8", "uint256", "uint256",
-                            "uint256", "uint256", "bool", "uint256", "uint256"
-                        ],
-                        [
-                            body.trader,
-                            market.contractAddress!,
-                            contractOutcome,  // Use contract enum value for hash
-                            amount,
-                            cost,
-                            body.deadline,
-                            nonce,
-                            body.isSell,
-                            BigInt(body.minAmountOut),
-                            BigInt(body.minReturn),
-                        ]
-                    )
-                ),
+                quoteHash,
                 signature: signedQuote.signature,
                 amount: new Decimal(amount.toString()),
                 cost: new Decimal(cost.toString()),
@@ -279,6 +283,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignedQuo
         return NextResponse.json(
             {
                 success: true,
+                quoteHash,
                 quote: {
                     trader: signedQuote.trader,
                     market: signedQuote.market,
@@ -290,6 +295,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignedQuo
                     nonce: signedQuote.nonce.toString(),
                     minAmountOut: signedQuote.minAmountOut.toString(),
                     minReturn: signedQuote.minReturn.toString(),
+                    marketVersion: body.marketVersion,
                     signature: signedQuote.signature,
                 },
             },

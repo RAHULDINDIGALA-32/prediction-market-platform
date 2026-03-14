@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useAccount } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMarketInfo, useMarketProbabilities, useUserPositions, useEthBalance } from "@/hooks/useMarketData";
-import { useUnsignedQuote, signQuote, UnsignedQuote } from "@/hooks/useQuote";
+import { useUnsignedQuote, signQuote, UnsignedQuote, SignedQuote } from "@/hooks/useQuote";
 import { calculateProbability, formatEth, formatTimeRemaining, formatAddress } from "@/lib/utils";
 import { parseContractError } from "@/lib/errors";
 //import { simulateExecuteTrade, recoverSigner } from "@/lib/debugUtils";
@@ -79,6 +79,13 @@ interface Props {
   market: Market;
 }
 
+interface PendingTradeExecution {
+  txHash: `0x${string}`;
+  trader: `0x${string}`;
+  marketId: string;
+  signedQuote: SignedQuote;
+}
+
 const ESTIMATED_GAS_COST = BigInt(150000);
 const GAS_PRICE_GWEI = BigInt(50);
 const SCALE_GWEI = 1_000_000_000n;
@@ -92,13 +99,15 @@ export default function MarketDetailClient({ market }: Props) {
   const [isSell, setIsSell] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingUnsignedQuote, setPendingUnsignedQuote] = useState<UnsignedQuote | null>(null);
-  const [pendingSignedQuote, setPendingSignedQuote] = useState<any>(null);
+  const [pendingSignedQuote, setPendingSignedQuote] = useState<SignedQuote | null>(null);
   const [signingError, setSigningError] = useState<string | null>(null);
   const [isSigningQuote, setIsSigningQuote] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txStatus, setTxStatus] = useState<"pending" | "confirmed" | "failed" | null>(null);
   const [txBlockNumber, setTxBlockNumber] = useState<number | null>(null);
   const [isRecordingTrade, setIsRecordingTrade] = useState(false);
+  const [recordingAttemptTxHash, setRecordingAttemptTxHash] = useState<string | null>(null);
+  const pendingTradeExecutionRef = useRef<PendingTradeExecution | null>(null);
 
   const marketAddress = market.contractAddress as `0x${string}` || market.id as `0x${string}`;
   const marketInfoQuery = useMarketInfo(marketAddress);
@@ -187,7 +196,8 @@ export default function MarketDetailClient({ market }: Props) {
 
   // Handle transaction confirmation and record trade to database
   useEffect(() => {
-    if (isSuccess && txReceipt && !isRecordingTrade) {
+    if (isSuccess && txReceipt && !isRecordingTrade && recordingAttemptTxHash !== txReceipt.transactionHash) {
+      setRecordingAttemptTxHash(txReceipt.transactionHash);
       setTxStatus("confirmed");
       const blockNumber = Number(txReceipt.blockNumber);
       setTxBlockNumber(blockNumber);
@@ -195,15 +205,15 @@ export default function MarketDetailClient({ market }: Props) {
     } else if (isError) {
       setTxStatus("failed");
     }
-  }, [isSuccess, isError, txReceipt, isRecordingTrade]);
+  }, [isSuccess, isError, txReceipt, isRecordingTrade, recordingAttemptTxHash]);
 
   // Record trade to database after on-chain confirmation
   const recordTradeToDatabase = async (blockNumber: number) => {
-    if (!txHash || !pendingSignedQuote || !address || blockNumber === null) {
+    const pendingTradeExecution = pendingTradeExecutionRef.current;
+
+    if (!pendingTradeExecution || blockNumber === null) {
       const missingData = {
-        txHash: !txHash,
-        hasPendingSignedQuote: !pendingSignedQuote,
-        address: !address,
+        pendingTradeExecution: !pendingTradeExecution,
         blockNumber: blockNumber === null,
       };
       console.error("Missing required data to record trade", missingData);
@@ -212,63 +222,77 @@ export default function MarketDetailClient({ market }: Props) {
     }
 
     try {
+      const { txHash: confirmedTxHash, trader, marketId, signedQuote } = pendingTradeExecution;
       setIsRecordingTrade(true);
 
       const dbPayload = {
-        txHash,
+        txHash: confirmedTxHash,
         txBlockNumber: blockNumber,
-        marketId: market.id,
-        trader: address,
-        outcome: (pendingSignedQuote.quote.outcome - 1) as 0 | 1,
-        amount: pendingSignedQuote.quote.amount,
-        cost: pendingSignedQuote.quote.cost,
-        isSell: pendingSignedQuote.quote.isSell,
-        nonce: pendingSignedQuote.quote.nonce,
-        marketVersion: pendingSignedQuote.quote.marketVersion,
-        signature: pendingSignedQuote.signature,
+        quoteHash: signedQuote.quoteHash,
+        marketId,
+        trader,
+        outcome: (signedQuote.quote.outcome - 1) as 0 | 1,
+        amount: signedQuote.quote.amount,
+        cost: signedQuote.quote.cost,
+        isSell: signedQuote.quote.isSell,
+        nonce: signedQuote.quote.nonce,
+        marketVersion: signedQuote.quote.marketVersion,
+        signature: signedQuote.signature,
       };
 
       console.log("Recording trade to database with payload:", dbPayload);
+      let response: Response | undefined;
+      let lastError: Error | null = null;
 
-      const response = await fetch("/api/trades/execute", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(dbPayload),
-      });
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          response = await fetch("/api/trades/execute", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(dbPayload),
+          });
 
-      // Check response validity
-      if (!response || !response.ok) {
-        const status = response?.status || 'unknown';
-        const statusText = response?.statusText || 'No response';
-        let errorMsg = `HTTP ${status}: ${statusText}`;
-        let errorDetails = null;
+          if (response.ok) {
+            break;
+          }
 
-        // Try to parse error response
-        if (response) {
-          try {
-            const contentType = response.headers.get('content-type');
-            if (contentType?.includes('application/json')) {
-              errorDetails = await response.json();
-              errorMsg = errorDetails?.error || errorMsg;
-            } else {
-              const responseText = await response.text();
-              console.warn("Non-JSON response from API:", responseText.substring(0, 500));
-              if (responseText) {
-                errorMsg = `${errorMsg} - ${responseText.substring(0, 200)}`;
-              }
+          const contentType = response.headers.get("content-type");
+          let apiErrorMessage = `HTTP ${response.status}: ${response.statusText}`;
+
+          if (contentType?.includes("application/json")) {
+            const errorBody = await response.json();
+            apiErrorMessage = errorBody?.error || apiErrorMessage;
+          } else {
+            const responseText = await response.text();
+            if (responseText) {
+              apiErrorMessage = `${apiErrorMessage} - ${responseText.substring(0, 200)}`;
             }
-          } catch (parseErr) {
-            console.warn("Could not parse error response:", parseErr);
+          }
+
+          lastError = new Error(apiErrorMessage);
+
+          if (response.status < 500 || attempt === 3) {
+            throw lastError;
+          }
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+
+          if (attempt === 3) {
+            throw lastError;
           }
         }
 
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      }
+
+      // Check response validity
+      if (!response || !response.ok) {
         console.error("Trade recording API error:", {
-          status,
-          statusText,
-          error: errorMsg,
-          details: errorDetails,
+          status: response?.status ?? "unknown",
+          statusText: response?.statusText ?? "No response",
+          error: lastError?.message ?? "Unknown trade recording error",
         });
-        throw new Error(errorMsg);
+        throw lastError ?? new Error("Trade recording failed");
       }
 
       // Parse successful response
@@ -324,6 +348,8 @@ export default function MarketDetailClient({ market }: Props) {
         setAmount("");
         setPendingUnsignedQuote(null);
         setPendingSignedQuote(null);
+        pendingTradeExecutionRef.current = null;
+        setRecordingAttemptTxHash(null);
         setTxHash(null);
         setTxStatus(null);
         setTxBlockNumber(null);
@@ -433,6 +459,7 @@ export default function MarketDetailClient({ market }: Props) {
       setSigningError(null);
       setTxStatus(null);
       setTxHash(null);
+      setRecordingAttemptTxHash(null);
 
       const signedQuote = await signQuote(pendingUnsignedQuote, market.id);
       setPendingSignedQuote(signedQuote);
@@ -493,7 +520,13 @@ export default function MarketDetailClient({ market }: Props) {
         gas: BigInt(5000000),
       });
 
-      // console.log("Transaction sent:", txHashResult);
+      pendingTradeExecutionRef.current = {
+        txHash: txHashResult,
+        trader: address as `0x${string}`,
+        marketId: market.id,
+        signedQuote,
+      };
+
       setTxHash(txHashResult);
     } catch (error: unknown) {
       console.error("Trade execution failed:", error);

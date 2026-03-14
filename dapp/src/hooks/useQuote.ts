@@ -33,9 +33,10 @@ export interface SignedQuote {
     isSell: boolean;
     minAmountOut?: string;
     minReturn?: string;
+    marketVersion: number;
   };
   signature: string;
-  quoteHash?: string;
+  quoteHash: string;
 }
 
 interface QuoteRequest {
@@ -172,6 +173,7 @@ export async function signQuote(unsignedQuote: UnsignedQuote, marketId: string):
       marketId,
     },
     signature: signedData.quote.signature,
+    quoteHash: signedData.quoteHash,
   };
 }
 
