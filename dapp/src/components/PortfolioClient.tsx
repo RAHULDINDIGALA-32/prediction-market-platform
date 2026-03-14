@@ -38,6 +38,13 @@ interface TraderPosition {
   endTime?: bigint;
   qYes: number;
   qNo: number;
+  trades: Array<{
+    id: string;
+    side: string;
+    amount: bigint;
+    cost: bigint;
+    createdAt: string;
+  }>;
 }
 
 interface CreatorMarket {
@@ -152,6 +159,15 @@ const parseTraderMarkets = (markets: Array<Record<string, unknown>>): TraderPosi
       endTime: m.endTime ? BigInt(String(m.endTime)) : undefined,
       qYes: Number(m.qYes || 0),
       qNo: Number(m.qNo || 0),
+      trades: Array.isArray(m.trades)
+        ? m.trades.map((trade) => ({
+            id: String((trade as Record<string, unknown>).id || ""),
+            side: String((trade as Record<string, unknown>).side || ""),
+            amount: decimalToBigInt((trade as Record<string, unknown>).amount),
+            cost: decimalToBigInt((trade as Record<string, unknown>).cost),
+            createdAt: String((trade as Record<string, unknown>).createdAt || ""),
+          }))
+        : [],
     };
   });
 
@@ -438,19 +454,23 @@ function TraderPositionCard({ market, userAddress }: { market: TraderPosition; u
   const yesBalance = balances?.[0]?.result ?? 0n;
   const noBalance = balances?.[1]?.result ?? 0n;
 
-  const hasYesPosition = yesBalance > 0n;
-  const hasNoPosition = noBalance > 0n;
-
-  if (!hasYesPosition && !hasNoPosition) return null;
-
   const probabilities = calculateProbability(BigInt(market.qYes), BigInt(market.qNo));
-  const positionBalance = hasYesPosition ? yesBalance : noBalance;
-  const positionSide = hasYesPosition ? "YES" : "NO";
-  const entryPrice = hasYesPosition ? probabilities.yes : probabilities.no;
-  
-  // Calculate estimated current value and P&L
-  const positionValue = (Number(positionBalance) / 1e18) * 1; // Simplified: 1 token = 1 ETH at resolution
-  const estimatedPnL = positionValue - (Number(positionBalance) / 1e18) * entryPrice;
+  const activePositions = [
+    {
+      side: "YES" as const,
+      balance: yesBalance,
+      price: probabilities.yes,
+      tradeCount: market.trades.filter((trade) => trade.side === "YES").length,
+    },
+    {
+      side: "NO" as const,
+      balance: noBalance,
+      price: probabilities.no,
+      tradeCount: market.trades.filter((trade) => trade.side === "NO").length,
+    },
+  ].filter((position) => position.balance > 0n);
+
+  if (activePositions.length === 0) return null;
 
   return (
     <Link href={`/markets/${market.id}`}>
@@ -459,29 +479,51 @@ function TraderPositionCard({ market, userAddress }: { market: TraderPosition; u
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
-                <Badge variant={positionSide === "YES" ? "default" : "secondary"}>
-                  {positionSide}
-                </Badge>
                 <Badge variant="outline" className="text-xs">
                   {market.category}
                 </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {activePositions.length} Active {activePositions.length === 1 ? "Position" : "Positions"}
+                </Badge>
               </div>
               <p className="font-semibold mb-1 line-clamp-2">{market.title || `Market ${market.id.slice(0, 8)}`}</p>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <span className="text-zinc-600 dark:text-zinc-400">Amount</span>
-                  <p className="font-mono font-medium">{formatUnits(positionBalance, 18)} {positionSide} Tokens</p>
-                </div>
-                <div>
-                  <span className="text-zinc-600 dark:text-zinc-400">Entry Price</span>
-                  <p className="font-mono font-medium">{(entryPrice * 100).toFixed(1)}%</p>
-                </div>
-                <div>
-                  <span className="text-zinc-600 dark:text-zinc-400">Est. P&L</span>
-                  <p className={`font-mono font-medium ${estimatedPnL > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                    {estimatedPnL > 0 ? "+" : ""}{estimatedPnL.toFixed(4)} ETH
-                  </p>
-                </div>
+              <div className="space-y-3 mt-3">
+                {activePositions.map((position) => {
+                  const positionValue = Number(position.balance) / 1e18;
+                  const estimatedPnL = positionValue - positionValue * position.price;
+
+                  return (
+                    <div
+                      key={position.side}
+                      className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <Badge variant={position.side === "YES" ? "default" : "secondary"}>
+                          {position.side}
+                        </Badge>
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                          {position.tradeCount} {position.tradeCount === 1 ? "trade" : "trades"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <span className="text-zinc-600 dark:text-zinc-400">Amount</span>
+                          <p className="font-mono font-medium">{formatUnits(position.balance, 18)} {position.side} Tokens</p>
+                        </div>
+                        <div>
+                          <span className="text-zinc-600 dark:text-zinc-400">Current Probabity</span>
+                          <p className="font-mono font-medium">{(position.price * 100).toFixed(1)}%</p>
+                        </div>
+                        <div>
+                          <span className="text-zinc-600 dark:text-zinc-400">Est. P&L</span>
+                          <p className={`font-mono font-medium ${estimatedPnL > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                            {estimatedPnL > 0 ? "+" : ""}{estimatedPnL.toFixed(4)} ETH
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <div className="flex flex-col items-end gap-2">
