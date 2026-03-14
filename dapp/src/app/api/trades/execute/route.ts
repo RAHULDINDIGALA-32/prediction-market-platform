@@ -149,7 +149,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
     }
 
     //  Check if trade with this txHash already exists
-    const existingTrade = await prisma.trade.findUnique({
+    const existingTrade = await prisma.trade.findFirst({
       where: { transactionHash: txHash },
       include: { market: true },
     });
@@ -274,7 +274,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
 
         // Update Market atomically with version check (optimistic lock)
         // If another trade updated this market, version won't match and update fails
-        const updatedMarket = await tx.market.update({
+        const updateResult = await tx.market.updateMany({
           where: { id: marketId, version: marketVersion }, // Optimistic lock
           data: {
             qYes: newQYes,
@@ -283,6 +283,18 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
             version: { increment: 1 }, // Increment version for next trade
           },
         });
+
+        if (updateResult.count === 0) {
+          throw new Error('OPTIMISTIC_LOCK_FAILED');
+        }
+
+        const updatedMarket = await tx.market.findUnique({
+          where: { id: marketId },
+        });
+
+        if (!updatedMarket) {
+          throw new Error('UPDATED_MARKET_NOT_FOUND');
+        }
 
         // Upsert SignedQuote as COMMITTED
         const quoteHash = ethers.keccak256(
@@ -356,10 +368,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<TradeExecutio
 
       return NextResponse.json(response, { status: 201 });
     } catch (error: unknown) {
-      // P2025 = record not found in update
       if (
         error instanceof Error &&
-        error.message.includes('P2025')
+        (error.message.includes('P2025') || error.message === 'OPTIMISTIC_LOCK_FAILED')
       ) {
         console.error('Optimistic lock failure (concurrent trade):', {
           message: error.message,
